@@ -7,6 +7,12 @@ from .models import (
     AuditResult,
     AuthBase,
 )
+from .session import (
+    AccountIdentity,
+    CreatedSession,
+    RedisSessionStore,
+    SessionStoreUnavailable,
+)
 
 __all__ = [
     "Account",
@@ -16,4 +22,8 @@ __all__ = [
     "AuditEvent",
     "AuditResult",
     "AuthBase",
+    "AccountIdentity",
+    "CreatedSession",
+    "RedisSessionStore",
+    "SessionStoreUnavailable",
 ]

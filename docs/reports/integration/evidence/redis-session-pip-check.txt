@@ -1,0 +1,5 @@
+mcp 1.12.4 has requirement pywin32>=310; sys_platform == "win32", but you have pywin32 308.
+openai-agents 0.4.2 has requirement openai<3,>=2.2, but you have openai 1.109.1.
+pythonproject16 0.1.0 has requirement langchain-openai>=1.1.11, but you have langchain-openai 1.1.9.
+sqlmodel 0.0.39 has requirement pydantic>=2.11.0, but you have pydantic 2.10.6.
+unstructured-client 0.45.0 has requirement pydantic>=2.12.5, but you have pydantic 2.10.6.

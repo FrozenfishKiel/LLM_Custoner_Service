@@ -11,6 +11,9 @@ click>=8.0.0,<9.0.0
 # 环境变量管理
 python-dotenv>=1.0.0,<2.0.0
 
+# Redis async Session storage
+redis>=5.0.0,<6.0.0
+
 # Web API 框架
 fastapi>=0.100.0,<1.0.0
 uvicorn>=0.20.0,<1.0.0
@@ -29,7 +32,7 @@ langchain-core>=0.3.0
 langchain-community>=0.3.0
 
 # LangChain 模型提供商
-langchain-openai>=0.2.0,<1.2.0
+langchain-openai>=0.2.0,<1.1.10
 langchain-anthropic>=0.2.0
 
 # LangGraph 对话流程引擎
