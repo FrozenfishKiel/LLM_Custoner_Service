@@ -1,0 +1,47 @@
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local and generated runtime data
+docker-data/
+ecs_demo/models/
+course_assets/
+trackers/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE and editor state
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Generated test artifacts
+/artifacts/generated/
+/reports/generated/
+/test-results/
+/test-output/
+/playwright-report/
+/junit*.xml
