@@ -29,7 +29,7 @@ langchain-core>=0.3.0
 langchain-community>=0.3.0
 
 # LangChain 模型提供商
-langchain-openai>=0.2.0
+langchain-openai>=0.2.0,<1.2.0
 langchain-anthropic>=0.2.0
 
 # LangGraph 对话流程引擎
@@ -61,6 +61,7 @@ numpy>=1.24.0,<3.0.0
 
 # ORM 框架
 sqlalchemy>=2.0.0,<3.0.0
+alembic>=1.13.0,<2.0.0
 
 # MySQL 驱动（可选：使用MySQL存储时需要）
 pymysql>=1.0.0
