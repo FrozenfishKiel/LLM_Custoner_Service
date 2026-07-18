@@ -13,6 +13,15 @@ from .session import (
     RedisSessionStore,
     SessionStoreUnavailable,
 )
+from .credentials import (
+    EmailAddress,
+    InvalidEmail,
+    InvalidPassword,
+    PasswordHasher,
+    PasswordHashingOverloaded,
+    PasswordPolicy,
+    normalize_email,
+)
 
 __all__ = [
     "Account",
@@ -26,4 +35,11 @@ __all__ = [
     "CreatedSession",
     "RedisSessionStore",
     "SessionStoreUnavailable",
+    "EmailAddress",
+    "InvalidEmail",
+    "InvalidPassword",
+    "PasswordHashingOverloaded",
+    "PasswordPolicy",
+    "PasswordHasher",
+    "normalize_email",
 ]
