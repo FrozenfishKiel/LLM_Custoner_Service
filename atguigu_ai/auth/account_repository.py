@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from .models import Account, AccountRole, AccountStatus, AuditEvent, AuditResult
+from .models import Account, AccountRole, AccountStatus, AccountUserBinding, AuditEvent, AuditResult
 
 
 class DuplicateAccountEmail(RuntimeError):
@@ -31,6 +31,15 @@ class AccountRecord:
     role: AccountRole
     status: AccountStatus
     email_verified_at: datetime | None
+
+
+@dataclass(frozen=True)
+class BusinessUserBindingRecord:
+    account_id: str
+    user_id: str
+    seed_version: str
+    role: AccountRole
+    account_status: AccountStatus
 
 
 _FORBIDDEN_METADATA_KEY_PARTS = frozenset({"password", "token", "session", "secret"})
@@ -89,6 +98,29 @@ class AccountRepository:
         except SQLAlchemyError:
             raise AccountRepositoryUnavailable() from None
         return None if account is None else _account_record(account)
+
+    def get_business_user_binding(self, account_id: str) -> BusinessUserBindingRecord | None:
+        _require_non_blank_string(account_id, "account_id")
+        try:
+            row = self._session.execute(
+                select(AccountUserBinding, Account)
+                .join(Account, Account.account_id == AccountUserBinding.account_id)
+                .where(
+                    AccountUserBinding.account_id == account_id,
+                )
+            ).one_or_none()
+        except SQLAlchemyError:
+            raise AccountRepositoryUnavailable() from None
+        if row is None:
+            return None
+        binding, account = row
+        return BusinessUserBindingRecord(
+            account_id=binding.account_id,
+            user_id=binding.user_id,
+            seed_version=binding.seed_version,
+            role=AccountRole(account.role),
+            account_status=AccountStatus(account.status),
+        )
 
     def mark_email_verified(
         self,

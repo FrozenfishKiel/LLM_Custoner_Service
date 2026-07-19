@@ -88,6 +88,8 @@ def authenticated_request(client: TestClient, path: str, payload: dict[str, obje
 def test_chat_message_requires_missing_or_invalid_session() -> None:
     client, agent, _, _ = build_client()
 
+    no_cookies = client.post("/api/chat/messages", json={"message": "hello"})
+    no_cookies_invalid_body = client.post("/api/chat/messages", json={})
     missing = client.post(
         "/api/chat/messages",
         cookies={"auth_csrf": "csrf-token"},
@@ -101,18 +103,25 @@ def test_chat_message_requires_missing_or_invalid_session() -> None:
         json={"message": "hello"},
     )
 
+    assert no_cookies.status_code == 401
+    assert no_cookies_invalid_body.status_code == 401
     assert missing.status_code == 401
     assert invalid.status_code == 401
     assert agent.messages == []
 
 
 def test_chat_message_requires_csrf() -> None:
-    client, agent, _, _ = build_client()
+    client, agent, _, resolver = build_client()
 
     response = client.post(
         "/api/chat/messages",
         cookies={"auth_session": "session-token", "auth_csrf": "csrf-token"},
         json={"message": "hello"},
+    )
+    invalid_body = client.post(
+        "/api/chat/messages",
+        cookies={"auth_session": "session-token", "auth_csrf": "csrf-token"},
+        json={},
     )
     mismatch = client.post(
         "/api/chat/messages",
@@ -122,8 +131,10 @@ def test_chat_message_requires_csrf() -> None:
     )
 
     assert response.status_code == 403
+    assert invalid_body.status_code == 403
     assert mismatch.status_code == 403
     assert agent.messages == []
+    assert resolver.calls == []
 
 
 def test_chat_message_uses_server_tracker_and_trusted_metadata() -> None:
@@ -158,7 +169,12 @@ def test_chat_message_ignores_or_rejects_client_identity_fields() -> None:
         "user_id": "attacker-user",
         "role": "admin",
         "account_status": "disabled",
-        "metadata": {"account_id": "attacker-account"},
+        "metadata": {
+            "account_id": "attacker-account",
+            "Account_ID": "attacker-account",
+            "nested": {"user_id": "attacker-user"},
+            "safe": "kept",
+        },
     }
 
     response = authenticated_request(client, "/api/chat/messages", forged)
@@ -168,6 +184,8 @@ def test_chat_message_ignores_or_rejects_client_identity_fields() -> None:
         _, sender_id, metadata = agent.messages[-1]
         assert sender_id == "account:account-1"
         assert metadata == {
+            "nested": {},
+            "safe": "kept",
             "account_id": "account-1",
             "user_id": "business-user-1",
             "account_role": "consumer",
@@ -184,6 +202,21 @@ def test_chat_message_returns_409_when_account_has_no_business_binding() -> None
     response = authenticated_request(client, "/api/chat/messages", {"message": "hello"})
 
     assert response.status_code == 409
+    assert agent.messages == []
+
+
+def test_chat_message_checks_csrf_before_business_binding() -> None:
+    client, agent, _, resolver = build_client()
+    resolver.error = BusinessUserNotBound()
+
+    response = client.post(
+        "/api/chat/messages",
+        cookies={"auth_session": "session-token", "auth_csrf": "csrf-token"},
+        json={"message": "hello"},
+    )
+
+    assert response.status_code == 403
+    assert resolver.calls == []
     assert agent.messages == []
 
 
@@ -210,7 +243,7 @@ def test_chat_message_returns_403_for_pending_or_disabled_account() -> None:
 
 
 def test_chat_reset_requires_csrf_and_resets_only_authenticated_tracker() -> None:
-    client, agent, _, _ = build_client()
+    client, agent, _, resolver = build_client()
 
     forbidden = client.post(
         "/api/chat/reset",
@@ -231,11 +264,13 @@ def test_chat_reset_requires_csrf_and_resets_only_authenticated_tracker() -> Non
     assert mismatch.status_code == 403
     assert response.status_code == 204
     assert agent.reset_calls == ["account:account-1"]
+    assert len(resolver.calls) == 1
 
 
 def test_chat_reset_requires_missing_or_invalid_session() -> None:
     client, agent, _, _ = build_client()
 
+    no_cookies = client.post("/api/chat/reset")
     missing = client.post(
         "/api/chat/reset",
         cookies={"auth_csrf": "csrf-token"},
@@ -247,8 +282,23 @@ def test_chat_reset_requires_missing_or_invalid_session() -> None:
         headers={"X-CSRF-Token": "csrf-token"},
     )
 
+    assert no_cookies.status_code == 401
     assert missing.status_code == 401
     assert invalid.status_code == 401
+    assert agent.reset_calls == []
+
+
+def test_chat_reset_checks_csrf_before_business_binding() -> None:
+    client, agent, _, resolver = build_client()
+    resolver.error = BusinessUserNotBound()
+
+    response = client.post(
+        "/api/chat/reset",
+        cookies={"auth_session": "session-token", "auth_csrf": "csrf-token"},
+    )
+
+    assert response.status_code == 403
+    assert resolver.calls == []
     assert agent.reset_calls == []
 
 

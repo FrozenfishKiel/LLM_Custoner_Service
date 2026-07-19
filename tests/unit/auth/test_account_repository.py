@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from atguigu_ai.auth import (
     Account,
+    AccountUserBinding,
     AccountRecord,
     AccountRepository,
     AccountRepositoryUnavailable,
@@ -37,6 +38,17 @@ def session():
                 email_verified_at DATETIME,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        connection.exec_driver_sql(
+            """
+            CREATE TABLE account_user_binding (
+                account_id VARCHAR(36) NOT NULL PRIMARY KEY,
+                user_id VARCHAR(50) NOT NULL UNIQUE,
+                seed_version VARCHAR(32) NOT NULL,
+                initialized_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(account_id) REFERENCES account(account_id)
             )
             """
         )
@@ -201,6 +213,33 @@ def test_replace_password_hash_updates_hash_without_returning_or_logging(session
     assert "new-secret-hash" not in caplog.text
 
 
+def test_get_business_user_binding_returns_joined_account_status(session):
+    repository = AccountRepository(session)
+    record = repository.create_pending_consumer(
+        "User@example.com",
+        "user@example.com",
+        "hashed-password",
+    )
+    session.get(Account, record.account_id).status = AccountStatus.disabled.value
+    session.add(
+        AccountUserBinding(
+            account_id=record.account_id,
+            user_id="business-user-1",
+            seed_version="seed-v1",
+        )
+    )
+    session.commit()
+
+    binding = repository.get_business_user_binding(record.account_id)
+
+    assert binding is not None
+    assert binding.account_id == record.account_id
+    assert binding.user_id == "business-user-1"
+    assert binding.seed_version == "seed-v1"
+    assert binding.role is AccountRole.consumer
+    assert binding.account_status is AccountStatus.disabled
+
+
 def test_record_audit_writes_sanitized_metadata(session):
     repository = AccountRepository(session)
 
@@ -313,6 +352,11 @@ def test_auth_exports_preserve_existing_names_and_append_repository_names():
         "AccountRepositoryUnavailable",
         "AccountRecord",
         "AccountRepository",
+        "BusinessIdentityResolver",
+        "BusinessUserBindingRecord",
+        "BusinessUserBindingUnavailable",
+        "BusinessUserIdentity",
+        "BusinessUserNotBound",
         "InvalidCredentials",
         "DuplicateRegistration",
         "AuthServiceUnavailable",

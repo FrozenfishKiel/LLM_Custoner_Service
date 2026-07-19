@@ -32,7 +32,14 @@ from .account_repository import (
     AccountRecord,
     AccountRepository,
     AccountRepositoryUnavailable,
+    BusinessUserBindingRecord,
     DuplicateAccountEmail,
+)
+from .business_identity import (
+    BusinessIdentityResolver,
+    BusinessUserBindingUnavailable,
+    BusinessUserIdentity,
+    BusinessUserNotBound,
 )
 from .service import (
     AuthService,
@@ -71,6 +78,11 @@ __all__ = [
     "AccountRepositoryUnavailable",
     "AccountRecord",
     "AccountRepository",
+    "BusinessIdentityResolver",
+    "BusinessUserBindingRecord",
+    "BusinessUserBindingUnavailable",
+    "BusinessUserIdentity",
+    "BusinessUserNotBound",
     "InvalidCredentials",
     "DuplicateRegistration",
     "AuthServiceUnavailable",

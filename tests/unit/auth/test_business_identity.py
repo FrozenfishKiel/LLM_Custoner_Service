@@ -15,6 +15,8 @@ from atguigu_ai.auth.business_identity import (
 @dataclass(frozen=True)
 class BoundBusinessUser:
     user_id: str
+    role: AccountRole = AccountRole.consumer
+    account_status: AccountStatus = AccountStatus.active
 
 
 class FakeBindingRepository:
@@ -70,6 +72,22 @@ async def test_resolver_rejects_pending_or_disabled_account(status: AccountStatu
         await resolver.resolve(active_identity(status))
 
     assert repository.account_ids == []
+
+
+@pytest.mark.asyncio
+async def test_resolver_rejects_stale_session_when_bound_account_is_not_active() -> None:
+    repository = FakeBindingRepository(
+        BoundBusinessUser(
+            user_id="business-user-1",
+            account_status=AccountStatus.disabled,
+        )
+    )
+    resolver = BusinessIdentityResolver(repository)
+
+    with pytest.raises(PermissionError):
+        await resolver.resolve(active_identity())
+
+    assert repository.account_ids == ["account-1"]
 
 
 @pytest.mark.asyncio

@@ -6,10 +6,12 @@ atguigu_ai API模块
 """
 
 from atguigu_ai.api.dependencies import AuthRouteDependencies
+from atguigu_ai.api.routes.chat import ChatRouteDependencies
 from atguigu_ai.api.server import AtguiguServer, create_app
 
 __all__ = [
     "AtguiguServer",
     "AuthRouteDependencies",
+    "ChatRouteDependencies",
     "create_app",
 ]

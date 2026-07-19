@@ -31,6 +31,7 @@ from atguigu_ai.channels.base_channel import UserMessage
 if TYPE_CHECKING:
     from atguigu_ai.agent.agent import Agent
     from atguigu_ai.api.dependencies import AuthRouteDependencies
+    from atguigu_ai.api.routes.chat import ChatRouteDependencies
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ class AtguiguServer:
         cors_origins: Optional[List[str]] = None,
         enable_inspect: bool = True,
         auth_deps: Optional[AuthRouteDependencies] = None,
+        chat_deps: Optional[ChatRouteDependencies] = None,
     ):
         """初始化服务器。
         
@@ -91,6 +93,7 @@ class AtguiguServer:
         self.cors_origins = _resolve_cors_origins(cors_origins, auth_deps is not None)
         self.enable_inspect = enable_inspect
         self.auth_deps = auth_deps
+        self.chat_deps = chat_deps
         
         # WebSocket连接管理
         self._ws_connections: Dict[str, List[WebSocket]] = {}
@@ -122,7 +125,12 @@ class AtguiguServer:
         if self.auth_deps is not None:
             from atguigu_ai.api.routes import create_auth_router
 
+            app.state.auth_deps = self.auth_deps
             app.include_router(create_auth_router(self.auth_deps))
+        if self.auth_deps is not None and self.chat_deps is not None:
+            from atguigu_ai.api.routes import create_chat_router
+
+            app.include_router(create_chat_router(self.chat_deps, self.auth_deps))
         
         return app
     
@@ -508,6 +516,7 @@ def create_app(
     cors_origins: Optional[List[str]] = None,
     enable_inspect: bool = True,
     auth_deps: Optional[AuthRouteDependencies] = None,
+    chat_deps: Optional[ChatRouteDependencies] = None,
 ) -> FastAPI:
     """创建FastAPI应用。
     
@@ -526,6 +535,7 @@ def create_app(
         cors_origins=cors_origins,
         enable_inspect=enable_inspect,
         auth_deps=auth_deps,
+        chat_deps=chat_deps,
     )
     return server.app
 
