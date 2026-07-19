@@ -207,6 +207,30 @@ class AuthService:
         except Exception:
             raise AuthServiceUnavailable() from None
 
+    async def resend_verification(self, email: str) -> PasswordResetAccepted:
+        try:
+            try:
+                normalized_email = normalize_email(email)
+            except InvalidEmail:
+                return PasswordResetAccepted()
+
+            with self._uow_factory() as uow:
+                account = uow.repository.get_by_normalized_email(normalized_email.normalized)
+            if account is None or account.status is not AccountStatus.pending:
+                return PasswordResetAccepted()
+
+            issued = await self._credential_tokens.issue(
+                account.account_id,
+                CredentialTokenPurpose.verify_email,
+            )
+            await self._email_delivery.send_verification_email(
+                account.email,
+                self._url("verify-email", issued.token),
+            )
+            return PasswordResetAccepted()
+        except Exception:
+            raise AuthServiceUnavailable() from None
+
     async def reset_password(self, token: str, new_password: str) -> PasswordResetAccepted | None:
         try:
             account_id = await self._credential_tokens.consume(
@@ -239,6 +263,41 @@ class AuthService:
                     raise
             return PasswordResetAccepted()
         except InvalidPassword:
+            raise
+        except PasswordHashingOverloaded:
+            raise AuthServiceUnavailable() from None
+        except Exception:
+            raise AuthServiceUnavailable() from None
+
+    async def change_password(self, account_id: str, current_password: str, new_password: str) -> None:
+        try:
+            with self._uow_factory() as uow:
+                try:
+                    account = uow.repository.lock_by_account_id(account_id)
+                    eligible = _eligible_for_login(account)
+                    password_hash = account.password_hash if eligible and account is not None else None
+                    verified = await self._password_hasher.verify(password_hash, current_password)
+                    if account is None or not eligible or not verified:
+                        raise InvalidCredentials() from None
+                    new_password_hash = await self._password_hasher.hash(new_password)
+                    await self._sessions.revoke_all(account.account_id)
+                    uow.repository.replace_password_hash(account.account_id, new_password_hash)
+                    uow.repository.record_audit(
+                        request_id="auth-service",
+                        actor_account_id=account.account_id,
+                        actor_role=account.role,
+                        event_type="account.password_changed",
+                        target_type="account",
+                        target_id=account.account_id,
+                        result=AuditResult.success,
+                        metadata=None,
+                    )
+                    uow.commit()
+                except Exception:
+                    _rollback(uow)
+                    raise
+            return None
+        except (InvalidCredentials, InvalidPassword):
             raise
         except PasswordHashingOverloaded:
             raise AuthServiceUnavailable() from None

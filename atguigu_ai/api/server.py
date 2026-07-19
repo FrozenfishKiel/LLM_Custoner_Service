@@ -30,6 +30,7 @@ from atguigu_ai.channels.base_channel import UserMessage
 
 if TYPE_CHECKING:
     from atguigu_ai.agent.agent import Agent
+    from atguigu_ai.api.dependencies import AuthRouteDependencies
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,7 @@ class AtguiguServer:
         agent: Optional[Agent] = None,
         cors_origins: Optional[List[str]] = None,
         enable_inspect: bool = True,
+        auth_deps: Optional[AuthRouteDependencies] = None,
     ):
         """初始化服务器。
         
@@ -88,6 +90,7 @@ class AtguiguServer:
         self.agent = agent
         self.cors_origins = cors_origins or ["*"]
         self.enable_inspect = enable_inspect
+        self.auth_deps = auth_deps
         
         # WebSocket连接管理
         self._ws_connections: Dict[str, List[WebSocket]] = {}
@@ -116,6 +119,10 @@ class AtguiguServer:
         
         # 注册路由
         self._register_routes(app)
+        if self.auth_deps is not None:
+            from atguigu_ai.api.routes import create_auth_router
+
+            app.include_router(create_auth_router(self.auth_deps))
         
         return app
     
@@ -500,6 +507,7 @@ def create_app(
     agent: Optional[Agent] = None,
     cors_origins: Optional[List[str]] = None,
     enable_inspect: bool = True,
+    auth_deps: Optional[AuthRouteDependencies] = None,
 ) -> FastAPI:
     """创建FastAPI应用。
     
@@ -517,6 +525,7 @@ def create_app(
         agent=agent,
         cors_origins=cors_origins,
         enable_inspect=enable_inspect,
+        auth_deps=auth_deps,
     )
     return server.app
 

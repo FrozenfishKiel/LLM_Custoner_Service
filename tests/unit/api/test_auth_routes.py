@@ -116,6 +116,13 @@ def cookie_dump(response) -> str:
     return "\n".join(response.headers.get_list("set-cookie"))
 
 
+def cookie_line(response, name: str) -> str:
+    for header in response.headers.get_list("set-cookie"):
+        if header.startswith(f"{name}="):
+            return header
+    raise AssertionError(f"missing Set-Cookie for {name}")
+
+
 def test_login_sets_session_and_csrf_cookies_and_returns_identity() -> None:
     client, service, _ = build_client()
 
@@ -129,12 +136,16 @@ def test_login_sets_session_and_csrf_cookies_and_returns_identity() -> None:
     assert response.json()["account_id"] == "account-1"
     assert response.json()["role"] == "consumer"
     assert response.json()["status"] == "active"
-    assert "auth_session=" in cookies
-    assert "HttpOnly" in cookies
-    assert "Secure" in cookies
-    assert "SameSite=Lax" in cookies
-    assert "auth_csrf=" in cookies
-    assert "auth_csrf=" in cookies and "HttpOnly" not in cookies.split("auth_csrf=")[-1].split("\n", 1)[0]
+    session_cookie = cookie_line(response, "auth_session")
+    csrf_cookie = cookie_line(response, "auth_csrf")
+    assert "auth_session=" in session_cookie
+    assert "HttpOnly" in session_cookie
+    assert "Secure" in session_cookie
+    assert "SameSite=Lax" in session_cookie
+    assert "auth_csrf=" in csrf_cookie
+    assert "HttpOnly" not in csrf_cookie
+    assert "Secure" in csrf_cookie
+    assert "SameSite=Lax" in csrf_cookie
     assert service.login_calls == [("User@example.com", "old correct horse")]
 
 
@@ -176,6 +187,17 @@ def test_verify_email_stays_enumeration_safe() -> None:
     assert unknown.status_code == 200
     assert known.json() == unknown.json() == {"accepted": True}
     assert service.verify_email_calls == ["known-token", "unknown-token"]
+
+
+def test_resend_verification_stays_enumeration_safe() -> None:
+    client, service, _ = build_client()
+
+    response = client.post("/api/auth/resend-verification", json={"email": "User@example.com"})
+
+    assert response.status_code == 200
+    assert response.json() == {"accepted": True}
+    assert cookie_dump(response) == ""
+    assert service.resend_verification_calls == ["User@example.com"]
 
 
 def test_forgot_password_stays_enumeration_safe() -> None:
@@ -227,6 +249,39 @@ def test_change_password_requires_matching_csrf_header() -> None:
     assert service.change_password_calls == []
 
 
+def test_change_password_requires_session_delegates_and_clears_cookies() -> None:
+    client, service, _ = build_client()
+
+    missing_session = client.post(
+        "/api/auth/change-password",
+        cookies={"auth_csrf": "csrf-token"},
+        headers={"X-CSRF-Token": "csrf-token"},
+        json={
+            "current_password": "old correct horse",
+            "new_password": "new correct horse",
+        },
+    )
+    assert missing_session.status_code == 401
+
+    response = client.post(
+        "/api/auth/change-password",
+        cookies={"auth_session": "session-token", "auth_csrf": "csrf-token"},
+        headers={"X-CSRF-Token": "csrf-token"},
+        json={
+            "current_password": "old correct horse",
+            "new_password": "new correct horse",
+        },
+    )
+
+    cookies = cookie_dump(response)
+    assert response.status_code == 204
+    assert "auth_session=;" in cookies
+    assert "auth_csrf=;" in cookies
+    assert service.change_password_calls == [
+        ("account-1", "old correct horse", "new correct horse")
+    ]
+
+
 def test_logout_requires_csrf_and_clears_cookies() -> None:
     client, service, _ = build_client()
 
@@ -245,6 +300,20 @@ def test_logout_requires_csrf_and_clears_cookies() -> None:
     assert "auth_csrf=;" in cookies
     assert "Max-Age=0" in cookies
     assert service.logout_calls == ["session-token"]
+
+
+def test_logout_with_csrf_is_noop_without_session() -> None:
+    client, service, _ = build_client()
+
+    response = client.post(
+        "/api/auth/logout",
+        cookies={"auth_csrf": "csrf-token"},
+        headers={"X-CSRF-Token": "csrf-token"},
+    )
+
+    assert response.status_code == 204
+    assert "auth_session=;" in cookie_dump(response)
+    assert service.logout_calls == []
 
 
 @pytest.mark.parametrize("session_token", [None, "missing-token"])
