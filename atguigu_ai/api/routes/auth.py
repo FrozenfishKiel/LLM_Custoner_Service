@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -19,6 +20,7 @@ from atguigu_ai.auth import (
     DuplicateRegistration,
     InvalidCredentials,
     InvalidPassword,
+    normalize_email,
 )
 from atguigu_ai.rate_limit import RateLimitRule
 
@@ -219,7 +221,9 @@ def _identity_response(identity) -> dict[str, str]:
 
 
 def _ip_email_subject(ip: str, email: str) -> str:
-    return f"{ip}:{email.strip().lower()}"
+    normalized = normalize_email(email).normalized
+    email_digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return f"{ip}:{email_digest}"
 
 
 def _service_unavailable() -> HTTPException:

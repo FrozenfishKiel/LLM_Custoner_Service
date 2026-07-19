@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import time
 from typing import Any
 
 from fastapi import HTTPException, Request, Response, status
@@ -102,7 +103,7 @@ async def check_rate_limit(
                 "Retry-After": str(decision.retry_after_seconds),
                 "X-RateLimit-Limit": str(decision.limit),
                 "X-RateLimit-Remaining": str(decision.remaining),
-                "X-RateLimit-Reset": str(decision.reset_after_seconds),
+                "X-RateLimit-Reset": str(int(time.time()) + decision.reset_after_seconds),
             },
         )
     return decision

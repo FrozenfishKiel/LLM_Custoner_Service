@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -265,7 +266,13 @@ def test_login_checks_ip_email_and_ip_rules_before_service_call() -> None:
     rule_name, subject = limiter.calls[0]
     assert rule_name == "auth.login.ip_email"
     assert "203.0.113.10" in subject
-    assert "user@example.com" in subject
+    assert "user@example.com" not in subject
+    assert "User@example.com" not in subject
+    assert len(subject.rsplit(":", 1)[-1]) == 64
+    assert int(response.headers["Retry-After"]) == 60
+    assert int(response.headers["X-RateLimit-Limit"]) == 5
+    assert int(response.headers["X-RateLimit-Remaining"]) == 0
+    assert int(response.headers["X-RateLimit-Reset"]) > int(time.time())
 
 
 def test_login_ip_rule_blocks_after_ip_email_rule_allows() -> None:
