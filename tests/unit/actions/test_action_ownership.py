@@ -4,11 +4,18 @@ import pytest
 
 from ecs_demo.actions.action_logistics import ActionGetLogisticsInfo
 from ecs_demo.actions.action_order import (
+    ActionAskOrderId,
+    ActionAskReceiveId,
     ActionAskSetReceiveInfo,
     ActionCancelOrder,
     ActionGetOrderDetail,
 )
-from ecs_demo.actions.action_postsale import ActionApplyPostsale, ActionCheckPostsaleEligible
+from ecs_demo.actions.action_postsale import (
+    ActionApplyPostsale,
+    ActionAskOrderIdAfterDelivered,
+    ActionAskPostsaleReason,
+    ActionCheckPostsaleEligible,
+)
 
 
 class Tracker:
@@ -30,6 +37,10 @@ class Tracker:
         (ActionGetOrderDetail(), {"order_id": "order-1", "user_id": "attacker"}),
         (ActionGetLogisticsInfo(), {"order_id": "order-1", "user_id": "attacker"}),
         (ActionCheckPostsaleEligible(), {"order_id": "order-1", "user_id": "attacker"}),
+        (ActionAskOrderId(), {"goto": "action_ask_order_id_before_shipped", "user_id": "attacker"}),
+        (ActionAskReceiveId(), {"order_id": "order-1", "user_id": "attacker"}),
+        (ActionAskOrderIdAfterDelivered(), {"user_id": "attacker"}),
+        (ActionAskPostsaleReason(), {"order_id": "order-1", "user_id": "attacker"}),
     ],
 )
 async def test_query_actions_reject_missing_trusted_identity(action, slots) -> None:

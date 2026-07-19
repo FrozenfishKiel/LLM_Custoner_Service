@@ -45,13 +45,19 @@ class ActionAskOrderId(Action):
         domain: Optional[Any] = None,
         **kwargs: Any,
     ) -> ActionResult:
+        result = ActionResult()
+        try:
+            context = current_action_user(tracker, **kwargs)
+        except ActionSecurityError:
+            result.add_response("当前登录身份不可用，请重新登录后再试。")
+            return result
+
         from actions.db import SessionLocal
         from actions.db_table_class import OrderInfo, OrderStatus
         from sqlalchemy.orm import joinedload
         from sqlalchemy import and_, or_
-        
-        result = ActionResult()
-        user_id = tracker.get_slot("user_id") or "1001"
+
+        user_id = context.user_id
         goto = tracker.get_slot("goto")
         
         try:
@@ -355,11 +361,17 @@ class ActionAskReceiveId(Action):
         domain: Optional[Any] = None,
         **kwargs: Any,
     ) -> ActionResult:
+        result = ActionResult()
+        try:
+            context = current_action_user(tracker, **kwargs)
+        except ActionSecurityError:
+            result.add_response("当前登录身份不可用，请重新登录后再试。")
+            return result
+
         from actions.db import SessionLocal
         from actions.db_table_class import ReceiveInfo, OrderInfo
-        
-        result = ActionResult()
-        user_id = tracker.get_slot("user_id") or "1001"
+
+        user_id = context.user_id
         order_id = tracker.get_slot("order_id")
         
         slots_to_set = []
@@ -372,7 +384,12 @@ class ActionAskReceiveId(Action):
                 # 获取当前订单的收货信息
                 current_receive_info = None
                 if order_id:
-                    order_info = session.query(OrderInfo).filter_by(order_id=order_id).first()
+                    order_info = owned_order_query(
+                        session,
+                        OrderInfo,
+                        user_id=context.user_id,
+                        order_id=order_id,
+                    ).first()
                     if order_info:
                         current_receive_info = order_info.receive
                 
