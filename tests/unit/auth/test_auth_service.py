@@ -336,6 +336,8 @@ def test_public_auth_service_exports_are_exact_and_async():
     assert inspect.iscoroutinefunction(AuthService.logout)
     assert inspect.iscoroutinefunction(AuthService.forgot_password)
     assert inspect.iscoroutinefunction(AuthService.reset_password)
+    assert inspect.iscoroutinefunction(AuthService.resend_verification)
+    assert inspect.iscoroutinefunction(AuthService.change_password)
 
 
 def test_result_values_are_frozen() -> None:
@@ -637,3 +639,78 @@ async def test_reset_password_preserves_invalid_new_password_validation(
     assert fixture.tokens.restore_attempts == []
     assert fixture.sessions.revoked_all == []
     assert fixture.uow_factory.created[-1].rollbacks == 1
+
+
+@pytest.mark.asyncio
+async def test_resend_verification_sends_email_only_for_pending_account(
+    fixture: ServiceFixture,
+) -> None:
+    pending = account(status=AccountStatus.pending)
+    fixture.repository.by_email[pending.email_normalized] = pending
+
+    result = await fixture.service.resend_verification("User@example.com")
+
+    assert result == PasswordResetAccepted()
+    assert fixture.tokens.issued == [
+        (pending.account_id, CredentialTokenPurpose.verify_email)
+    ]
+    assert fixture.email.verifications == [
+        (
+            pending.email,
+            f"https://public.example/app/verify-email?token={VERIFY_TOKEN}",
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_change_password_verifies_current_password_revokes_sessions_and_updates_hash(
+    fixture: ServiceFixture,
+) -> None:
+    active = account(status=AccountStatus.active, verified_at=NOW, password_hash="hash-old")
+    fixture.repository.by_id[active.account_id] = active
+    fixture.hasher.valid_hash_passwords["hash-old"] = "old correct horse"
+
+    await fixture.service.change_password(
+        active.account_id,
+        "old correct horse",
+        "new correct horse",
+    )
+
+    assert fixture.hasher.verifications == [("hash-old", "old correct horse")]
+    assert fixture.hasher.hashes == ["new correct horse"]
+    assert fixture.sessions.revoked_all == [active.account_id]
+    assert fixture.repository.events[-2:] == [
+        ("replace_password_hash", active.account_id, "hash-new correct horse"),
+        (
+            "record_audit",
+            "auth-service",
+            active.account_id,
+            AccountRole.consumer,
+            "account.password_changed",
+            "account",
+            active.account_id,
+            AuditResult.success,
+            None,
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_change_password_preserves_invalid_new_password_validation(
+    fixture: ServiceFixture,
+) -> None:
+    active = account(status=AccountStatus.active, verified_at=NOW, password_hash="hash-old")
+    fixture.repository.by_id[active.account_id] = active
+    fixture.hasher.valid_hash_passwords["hash-old"] = "old correct horse"
+    fixture.hasher.hash_error = InvalidPassword("Password does not meet requirements")
+
+    with pytest.raises(InvalidPassword) as captured:
+        await fixture.service.change_password(
+            active.account_id,
+            "old correct horse",
+            "short",
+        )
+
+    assert str(captured.value) == "Password does not meet requirements"
+    assert fixture.sessions.revoked_all == []
+    assert not any(event[0] == "replace_password_hash" for event in fixture.repository.events)
