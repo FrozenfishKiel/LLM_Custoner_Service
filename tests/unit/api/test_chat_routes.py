@@ -14,6 +14,7 @@ from atguigu_ai.auth.business_identity import (
     BusinessUserIdentity,
     BusinessUserNotBound,
 )
+from atguigu_ai.rate_limit import RateLimitStoreUnavailable
 
 
 class FakeAuthService:
@@ -66,14 +67,48 @@ class FakeAgent:
         self.reset_calls.append(sender_id)
 
 
-def build_client() -> tuple[TestClient, FakeAgent, FakeSessions, FakeBusinessIdentityResolver]:
+class FakeRateLimiter:
+    def __init__(self) -> None:
+        self.blocked_rules: set[str] = set()
+        self.unavailable_rules: set[str] = set()
+        self.calls: list[tuple[str, str]] = []
+
+    async def check(self, rule, subject: str):
+        self.calls.append((rule.name, subject))
+        if rule.name in self.unavailable_rules:
+            raise RateLimitStoreUnavailable()
+        allowed = rule.name not in self.blocked_rules
+        return SimpleNamespace(
+            allowed=allowed,
+            limit=rule.limit,
+            remaining=rule.limit - 1 if allowed else 0,
+            retry_after_seconds=0 if allowed else 60,
+            reset_after_seconds=60,
+            rule_name=rule.name,
+        )
+
+
+def build_client(
+    *,
+    rate_limiter: FakeRateLimiter | None = None,
+) -> tuple[TestClient, FakeAgent, FakeSessions, FakeBusinessIdentityResolver]:
     sessions = FakeSessions()
     resolver = FakeBusinessIdentityResolver()
     agent = FakeAgent()
-    auth_deps = AuthRouteDependencies(service=FakeAuthService(), sessions=sessions)
+    auth_deps = AuthRouteDependencies(
+        service=FakeAuthService(),
+        sessions=sessions,
+        rate_limiter=rate_limiter,
+    )
     app = create_app(auth_deps=auth_deps, enable_inspect=False)
     app.include_router(create_chat_router(ChatRouteDependencies(agent, resolver)))
     return TestClient(app, base_url="https://testserver"), agent, sessions, resolver
+
+
+def build_client_with_rate_limiter() -> tuple[TestClient, FakeAgent, FakeSessions, FakeBusinessIdentityResolver, FakeRateLimiter]:
+    limiter = FakeRateLimiter()
+    client, agent, sessions, resolver = build_client(rate_limiter=limiter)
+    return client, agent, sessions, resolver, limiter
 
 
 def authenticated_request(client: TestClient, path: str, payload: dict[str, object] | None = None):
@@ -156,6 +191,45 @@ def test_chat_message_uses_server_tracker_and_trusted_metadata() -> None:
             },
         )
     ]
+
+
+def test_chat_message_rate_limit_blocks_before_payload_and_agent() -> None:
+    client, agent, _, _, limiter = build_client_with_rate_limiter()
+    limiter.blocked_rules.add("chat.messages.account")
+
+    response = authenticated_request(client, "/api/chat/messages", {"message": "hello"})
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    assert agent.messages == []
+    assert limiter.calls == [("chat.messages.account", "account-1")]
+
+
+def test_chat_message_rate_limit_uses_server_account_not_forged_metadata() -> None:
+    client, agent, _, _, limiter = build_client_with_rate_limiter()
+
+    response = authenticated_request(
+        client,
+        "/api/chat/messages",
+        {"message": "hello", "metadata": {"account_id": "attacker-account"}},
+    )
+
+    assert response.status_code == 200
+    assert ("chat.messages.account", "account-1") in limiter.calls
+    assert all(subject != "attacker-account" for _, subject in limiter.calls)
+    assert agent.messages[-1][1] == "account:account-1"
+
+
+def test_chat_message_rate_limiter_outage_returns_sanitized_503() -> None:
+    client, agent, _, _, limiter = build_client_with_rate_limiter()
+    limiter.unavailable_rules.add("chat.messages.account")
+
+    response = authenticated_request(client, "/api/chat/messages", {"message": "hello"})
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Rate limit service is unavailable"}
+    assert "redis" not in response.text.lower()
+    assert agent.messages == []
 
 
 def test_chat_message_ignores_or_rejects_client_identity_fields() -> None:
@@ -265,6 +339,30 @@ def test_chat_reset_requires_csrf_and_resets_only_authenticated_tracker() -> Non
     assert response.status_code == 204
     assert agent.reset_calls == ["account:account-1"]
     assert len(resolver.calls) == 1
+
+
+def test_chat_reset_rate_limit_blocks_before_reset_tracker() -> None:
+    client, agent, _, _, limiter = build_client_with_rate_limiter()
+    limiter.blocked_rules.add("chat.reset.account")
+
+    response = authenticated_request(client, "/api/chat/reset")
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    assert agent.reset_calls == []
+    assert limiter.calls == [("chat.reset.account", "account-1")]
+
+
+def test_chat_reset_rate_limiter_outage_returns_sanitized_503() -> None:
+    client, agent, _, _, limiter = build_client_with_rate_limiter()
+    limiter.unavailable_rules.add("chat.reset.account")
+
+    response = authenticated_request(client, "/api/chat/reset")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Rate limit service is unavailable"}
+    assert "redis" not in response.text.lower()
+    assert agent.reset_calls == []
 
 
 def test_chat_reset_requires_missing_or_invalid_session() -> None:

@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from atguigu_ai.api.dependencies import (
     AuthRouteDependencies,
+    check_rate_limit,
     require_csrf,
     resolve_authenticated_identity,
 )
@@ -17,6 +18,7 @@ from atguigu_ai.auth.business_identity import (
     BusinessUserBindingUnavailable,
     BusinessUserNotBound,
 )
+from atguigu_ai.rate_limit import RateLimitRule
 
 
 _IDENTITY_METADATA_KEYS = {
@@ -30,6 +32,9 @@ _IDENTITY_METADATA_KEYS = {
     "status",
     "account_status",
 }
+
+CHAT_MESSAGES_ACCOUNT_RULE = RateLimitRule("chat.messages.account", "chat", 30, 60)
+CHAT_RESET_ACCOUNT_RULE = RateLimitRule("chat.reset.account", "chat", 10, 60)
 
 
 @dataclass(frozen=True)
@@ -50,6 +55,7 @@ def create_chat_router(
         account_identity = await _require_account_identity(request, deps)
         require_csrf(request, deps)
         identity = await _require_business_identity(account_identity, chat_deps)
+        await check_rate_limit(deps.rate_limiter, CHAT_MESSAGES_ACCOUNT_RULE, identity.account_id)
         payload = await _message_payload(request)
         sender_id = _tracker_key(identity.account_id)
         response = await chat_deps.agent.handle_message(
@@ -74,6 +80,7 @@ def create_chat_router(
         account_identity = await _require_account_identity(request, deps)
         require_csrf(request, deps)
         identity = await _require_business_identity(account_identity, chat_deps)
+        await check_rate_limit(deps.rate_limiter, CHAT_RESET_ACCOUNT_RULE, identity.account_id)
         await chat_deps.agent.reset_tracker(_tracker_key(identity.account_id))
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
