@@ -374,7 +374,16 @@ def gen_order_info(user_info: UserInfo) -> OrderInfo:
     if order_status.order_status == "售后中":
         return order_info
     # 生成完成时间
-    order_info.complete_time = max([postsale.complete_time for postsale in postsales])
+    complete_times = [
+        postsale.complete_time
+        for postsale in postsales
+        if postsale.complete_time is not None
+    ]
+    order_info.complete_time = (
+        max(complete_times)
+        if complete_times
+        else gen_new_time(order_info.delivered_time, 6 * 60 * 60)
+    )
     return order_info
 
 
