@@ -271,7 +271,7 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "feat: add ac
 - Create: `atguigu_ai/auth/service.py`
 - Modify: `atguigu_ai/auth/__init__.py`
 
-- [ ] **Step 1: Write AuthService unit tests with fakes**
+- [x] **Step 1: Write AuthService unit tests with fakes**
 
 Create fake repository/unit-of-work, fake hasher, fake credential-token store, fake session store, and fake email delivery. Cover:
 
@@ -287,7 +287,7 @@ Create fake repository/unit-of-work, fake hasher, fake credential-token store, f
 - forgot password returns accepted for missing/pending/disabled accounts and only sends email for active accounts;
 - reset password consumes reset token before lock, hashes new password, calls `revoke_all` while the row is locked, updates password, records audit, commits, and never restores consumed token after failure.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -297,7 +297,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/auth/test_auth_
 
 Expected: collection fails because `atguigu_ai.auth.service` does not exist.
 
-- [ ] **Step 3: Implement AuthService**
+- [x] **Step 3: Implement AuthService**
 
 Create `atguigu_ai/auth/service.py` with:
 
@@ -323,7 +323,7 @@ class PasswordResetAccepted:
 
 `AuthService` constructor accepts repository unit-of-work factory, `PasswordHasher`, `RedisCredentialTokenStore`, `RedisSessionStore`, email delivery, `public_base_url`, and `clock`. All public methods are async. Sync repository work runs inside the injected unit-of-work; Argon2/Redis/email calls keep their existing async boundaries. Any dependency exception from repository, token store, session store, password hasher overload, or email delivery maps to `AuthServiceUnavailable("Authentication service is unavailable")` unless the contract says the public outcome is enumeration-safe accepted/invalid.
 
-- [ ] **Step 4: Run GREEN and regression**
+- [x] **Step 4: Run GREEN and regression**
 
 Run:
 
@@ -334,7 +334,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/auth tests/unit
 
 Expected: all tests pass.
 
-- [ ] **Step 5: Commit service slice**
+- [x] **Step 5: Commit service slice**
 
 Run:
 
