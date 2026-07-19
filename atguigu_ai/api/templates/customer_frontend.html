@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SHOPWISE 客服工作台</title>
+  <link rel="stylesheet" href="/static/customer_frontend.css?v=20260720">
+</head>
+<body data-page="{{ page_name }}">
+  <div class="customer-shell">
+    <aside class="sidebar" aria-label="电商导航">
+      <a class="brand" href="/chat" aria-label="SHOPWISE 首页">
+        <span class="brand-mark">S</span>
+        <span>SHOPWISE</span>
+      </a>
+      <nav class="main-nav">
+        <a class="nav-item is-active" href="/chat">工作台</a>
+        <a class="nav-item" href="#orders">我的订单</a>
+        <a class="nav-item" href="#service">售后进度</a>
+        <a class="nav-item" href="#member">优惠与会员</a>
+        <a class="nav-item" href="/account">账户安全</a>
+      </nav>
+      <section class="sidebar-card" aria-label="服务承诺">
+        <span class="eyebrow">SERVICE PROMISE</span>
+        <strong>7×24 小时在线</strong>
+        <p>登录后可安全查询订单、售后与账户状态。商品图仅做氛围背景，不影响客服判断。</p>
+      </section>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">智能客服系统</p>
+          <h1>客服工作台</h1>
+          <p class="lead">标准电商后台式体验：订单、售后、风险提示和 AI 客服会话集中在一个正式界面里完成。</p>
+        </div>
+        <div class="account-chip" data-testid="account-chip">
+          <span class="status-dot"></span>
+          <span id="accountStatus">未登录</span>
+        </div>
+      </header>
+
+      <section class="auth-grid" aria-label="账户入口">
+        <form class="auth-card" data-testid="login-form" id="loginForm">
+          <h2>登录账户</h2>
+          <label>邮箱<input name="email" type="email" autocomplete="email" required value="user@example.com"></label>
+          <label>密码<input name="password" type="password" autocomplete="current-password" required value="correct horse"></label>
+          <button type="submit">登录并进入客服</button>
+          <a href="/forgot-password">忘记密码？</a>
+        </form>
+
+        <form class="auth-card" data-testid="register-form" id="registerForm">
+          <h2>注册新账户</h2>
+          <label>邮箱<input name="email" type="email" autocomplete="email" required placeholder="new@example.com"></label>
+          <label>密码<input name="password" type="password" autocomplete="new-password" required placeholder="至少满足后端密码策略"></label>
+          <button type="submit">发送验证邮件</button>
+        </form>
+
+        <form class="auth-card compact" data-testid="forgot-password-form" id="forgotPasswordForm">
+          <h2>找回密码</h2>
+          <label>邮箱<input name="email" type="email" required placeholder="user@example.com"></label>
+          <button type="submit">发送重置邮件</button>
+        </form>
+
+        <form class="auth-card compact" data-testid="reset-password-form" id="resetPasswordForm">
+          <h2>重置密码</h2>
+          <label>重置 Token<input name="token" type="text" required placeholder="邮件中的 token"></label>
+          <label>新密码<input name="new_password" type="password" required></label>
+          <button type="submit">确认重置</button>
+        </form>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="metric-card">
+          <span>待处理订单</span>
+          <strong>3</strong>
+          <p>个咨询可继续</p>
+        </article>
+        <article class="metric-card">
+          <span>售后状态</span>
+          <strong class="blue">退款审核中</strong>
+          <p>预计 24 小时内更新</p>
+        </article>
+        <article class="metric-card warning">
+          <span>风险提示</span>
+          <strong>登录与 CSRF 已保护</strong>
+          <p>请先登录后再继续；安全校验失败、操作太频繁、服务暂时不可用都会显示中文提示。</p>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <article class="orders-card" id="orders">
+          <div class="section-heading">
+            <h2>最近订单</h2>
+            <button type="button" id="refreshAccountButton">刷新账户</button>
+          </div>
+          <div class="order-list">
+            <div class="order-row">
+              <div class="order-media" aria-hidden="true"></div>
+              <div><strong>轻量羽绒服</strong><span>¥899 · 配送中</span></div>
+              <button type="button" data-chat-prompt="我想查询轻量羽绒服什么时候到。">咨询物流</button>
+            </div>
+            <div class="order-row">
+              <div class="order-media cool" aria-hidden="true"></div>
+              <div><strong>无线降噪耳机</strong><span>¥1299 · 已签收</span></div>
+              <button type="button" data-chat-prompt="耳机已签收，但我想了解退换货政策。">咨询售后</button>
+            </div>
+            <div class="order-row">
+              <div class="order-media warm" aria-hidden="true"></div>
+              <div><strong>护肤礼盒</strong><span>¥399 · 待付款</span></div>
+              <button type="button" data-chat-prompt="护肤礼盒现在付款还有优惠吗？">咨询优惠</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="support-panel" id="service" aria-label="AI 售后顾问">
+          <div class="support-header">
+            <div>
+              <h2>AI 售后顾问</h2>
+              <p>通过账户验证后，可查询订单和售后。</p>
+            </div>
+            <button type="button" data-testid="logout-button" id="logoutButton">退出</button>
+          </div>
+          <div class="messages" id="messages" aria-live="polite">
+            <div class="message bot">你好，我是 SHOPWISE AI 售后顾问。登录后可以帮你查订单、解释售后政策、继续处理退款。</div>
+          </div>
+          <form class="chat-form" data-testid="chat-form" id="chatForm">
+            <label class="sr-only" for="chatInput">输入客服问题</label>
+            <input id="chatInput" name="message" placeholder="输入订单、物流或售后问题..." required>
+            <button type="submit">发送</button>
+          </form>
+          <button class="ghost-button" type="button" data-testid="reset-chat-button" id="resetChatButton">重置聊天</button>
+        </article>
+      </section>
+
+      <section class="account-section" id="member">
+        <form class="auth-card" data-testid="change-password-form" id="changePasswordForm">
+          <h2>账户安全</h2>
+          <label>当前密码<input name="current_password" type="password" autocomplete="current-password"></label>
+          <label>新密码<input name="new_password" type="password" autocomplete="new-password"></label>
+          <button type="submit">修改密码</button>
+        </form>
+        <div class="notice" id="notice" role="status">准备就绪。请先登录，再开始客服会话。</div>
+      </section>
+    </main>
+  </div>
+  <script src="/static/customer_frontend.js?v=20260720" defer></script>
+</body>
+</html>

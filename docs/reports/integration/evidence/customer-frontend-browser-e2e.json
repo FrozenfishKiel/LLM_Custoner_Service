@@ -1,0 +1,34 @@
+{
+  "startedAt": "2026-07-19T16:02:37.156Z",
+  "baseUrl": "http://127.0.0.1:8765",
+  "steps": [
+    {
+      "name": "打开 /login 并看到正式电商客服工作台",
+      "ok": true
+    },
+    {
+      "name": "未登录聊天显示中文错误",
+      "ok": true
+    },
+    {
+      "name": "登录成功并写入 session/csrf cookie",
+      "ok": true
+    },
+    {
+      "name": "认证后客服消息往返",
+      "ok": true
+    },
+    {
+      "name": "重置聊天成功",
+      "ok": true
+    },
+    {
+      "name": "退出登录成功",
+      "ok": true
+    }
+  ],
+  "firstScreenMs": 39,
+  "chatRoundTripMs": 342,
+  "consoleErrors": [],
+  "ok": true
+}

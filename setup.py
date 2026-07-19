@@ -232,6 +232,8 @@ setup(
     package_data={
         "atguigu_ai": [
             "templates/**/*",  # 模板文件
+            "api/templates/*.html",
+            "api/static/*",
             "data/**/*",       # 数据文件
         ],
     },

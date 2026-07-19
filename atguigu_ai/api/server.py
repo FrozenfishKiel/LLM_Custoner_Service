@@ -122,6 +122,12 @@ class AtguiguServer:
         
         # 注册路由
         self._register_routes(app)
+        static_dir = Path(__file__).resolve().parent / "static"
+        if static_dir.exists():
+            app.mount("/static", StaticFiles(directory=static_dir), name="static")
+        from atguigu_ai.api.routes import create_frontend_router
+
+        app.include_router(create_frontend_router())
         if self.auth_deps is not None:
             from atguigu_ai.api.routes import create_auth_router
 
