@@ -1,0 +1,2 @@
+﻿mysql_temp_databases=0
+redis_db15_dbsize=0

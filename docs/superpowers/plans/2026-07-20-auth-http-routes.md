@@ -57,7 +57,7 @@ HTTP route behavior:
 - Create: `tests/unit/api/test_auth_routes.py`
 - Modify: `atguigu_ai/auth/service.py` only after tests are written
 
-- [ ] **Step 1: Write the failing service-extension and route-contract tests**
+- [x] **Step 1: Write the failing service-extension and route-contract tests**
 
 Add the following new behavior tests to `tests/unit/auth/test_auth_service.py`:
 
@@ -125,7 +125,7 @@ The fake route test module should also cover:
 - login failure does not set cookies;
 - logout clears both cookies.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -135,7 +135,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/auth/test_auth_
 
 Expected: collection fails because the new route module and service methods do not exist yet.
 
-- [ ] **Step 3: Commit the RED contract**
+- [x] **Step 3: Commit the RED contract**
 
 ```powershell
 git add tests/unit/auth/test_auth_service.py tests/unit/api/test_auth_routes.py
@@ -156,7 +156,7 @@ Expected: only the new tests and the AuthService extension coverage are committe
 - Modify: `atguigu_ai/api/__init__.py`
 - Modify: `tests/unit/auth/test_auth_service.py`
 
-- [ ] **Step 1: Implement the minimal service extension**
+- [x] **Step 1: Implement the minimal service extension**
 
 Add two methods to `AuthService`:
 
@@ -174,7 +174,7 @@ Required behavior:
 
 Use the existing repository/unit-of-work and existing `PasswordHasher`, `RedisCredentialTokenStore`, `RedisSessionStore`, and `EmailDeliveryUnavailable` behavior.
 
-- [ ] **Step 2: Implement route dependencies and router**
+- [x] **Step 2: Implement route dependencies and router**
 
 Create `atguigu_ai/api/dependencies.py` with:
 
@@ -200,7 +200,7 @@ Create `atguigu_ai/api/routes/auth.py` with an `APIRouter` exposing the routes a
 
 Modify `atguigu_ai/api/server.py` so `create_app()` accepts an optional `auth_deps: AuthRouteDependencies | None`, mounts the auth router when provided, and keeps existing demo routes untouched.
 
-- [ ] **Step 3: Run GREEN**
+- [x] **Step 3: Run GREEN**
 
 Run:
 
@@ -213,7 +213,7 @@ git diff --check
 
 Expected: all tests pass; cookie/CSRF helpers are exercised by unit tests; existing auth/security regression stays green.
 
-- [ ] **Step 4: Commit the router slice**
+- [x] **Step 4: Commit the router slice**
 
 ```powershell
 git add atguigu_ai/auth/service.py atguigu_ai/api/dependencies.py atguigu_ai/api/routes/__init__.py atguigu_ai/api/routes/auth.py atguigu_ai/api/server.py atguigu_ai/api/__init__.py tests/unit/auth/test_auth_service.py tests/unit/api/test_auth_routes.py
@@ -226,7 +226,7 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "feat: add au
 **Files:**
 - Create: `tests/integration/test_auth_routes_http.py`
 
-- [ ] **Step 1: Write the integration tests**
+- [x] **Step 1: Write the integration tests**
 
 Use the same isolated MySQL database helper pattern and owned Redis DB 15 harness used by the auth service integration tests. Build a FastAPI app with `create_app(auth_deps=...)` and a `TestClient(base_url="https://testserver")`.
 
@@ -246,7 +246,7 @@ Cover:
 
 Include at least one negative test that omits the CSRF header and proves the route is rejected before service mutation.
 
-- [ ] **Step 2: Run the integration test and cleanup checks**
+- [x] **Step 2: Run the integration test and cleanup checks**
 
 Run:
 
@@ -257,7 +257,7 @@ docker exec llm-cs-redis redis-cli -n 15 DBSIZE
 
 Expected: integration passes, Redis DB15 is `0`.
 
-- [ ] **Step 3: Update technical design**
+- [x] **Step 3: Update technical design**
 
 Add a short subsection to `docs/TECHNICAL_DESIGN.md` under the Auth module or HTTP interface describing:
 
@@ -267,7 +267,7 @@ Add a short subsection to `docs/TECHNICAL_DESIGN.md` under the Auth module or HT
 - that change-password and logout clear or invalidate current session state;
 - that account deletion and browser pages remain later slices.
 
-- [ ] **Step 4: Commit the integration slice**
+- [x] **Step 4: Commit the integration slice**
 
 ```powershell
 git add tests/integration/test_auth_routes_http.py docs/TECHNICAL_DESIGN.md
@@ -289,7 +289,7 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "test: cover 
 - Create: `docs/reports/integration/evidence/auth-http-routes-dbsize.txt`
 - Create: `docs/reports/integration/evidence/auth-http-routes-independent-qa.md`
 
-- [ ] **Step 1: Capture the final verification commands**
+- [x] **Step 1: Capture the final verification commands**
 
 Run and retain UTF-8 evidence:
 
@@ -305,19 +305,19 @@ docker exec llm-cs-redis redis-cli -n 15 DBSIZE
 
 Expected: all tests and checks pass; Redis DB15 is `0`.
 
-- [ ] **Step 2: Run a scoped secret scan**
+- [x] **Step 2: Run a scoped secret scan**
 
 Scan the planned HTTP/auth artifacts for private keys, credential-bearing Redis/MySQL URLs, SMTP passwords, raw tokens, session IDs, CSRF secrets, and `sk-*`/cloud key shapes. Deterministic test probe strings are allowed only when they are clearly fake and documented.
 
-- [ ] **Step 3: Independent QA review**
+- [x] **Step 3: Independent QA review**
 
 Dispatch/reuse a QA agent to rerun the targeted unit tests, integration route tests, regression suite, full suite, compileall, Redis/MySQL cleanup, evidence UTF-8 checks, and secret scan. Require no open Critical/Important findings.
 
-- [ ] **Step 4: Write the report and close the loop**
+- [x] **Step 4: Write the report and close the loop**
 
 Write `docs/reports/integration/2026-07-20-auth-http-routes.md` summarizing command results, cookie/CSRF behavior, route coverage, and residual risks. Mark all checkboxes complete only after the review gate passes.
 
-- [ ] **Step 5: Final commit**
+- [x] **Step 5: Final commit**
 
 ```powershell
 git add atguigu_ai/auth/service.py atguigu_ai/api/dependencies.py atguigu_ai/api/routes/__init__.py atguigu_ai/api/routes/auth.py atguigu_ai/api/server.py atguigu_ai/api/__init__.py tests/unit/auth/test_auth_service.py tests/unit/api/test_auth_routes.py tests/integration/test_auth_routes_http.py docs/TECHNICAL_DESIGN.md docs/superpowers/plans/2026-07-20-auth-http-routes.md docs/reports/integration/2026-07-20-auth-http-routes.md docs/reports/integration/evidence/auth-http-routes-unit.txt docs/reports/integration/evidence/auth-http-routes-integration.txt docs/reports/integration/evidence/auth-http-routes-regression.txt docs/reports/integration/evidence/auth-http-routes-full-suite.txt docs/reports/integration/evidence/auth-http-routes-compileall.txt docs/reports/integration/evidence/auth-http-routes-whitespace.txt docs/reports/integration/evidence/auth-http-routes-secret-scan.txt docs/reports/integration/evidence/auth-http-routes-dbsize.txt docs/reports/integration/evidence/auth-http-routes-independent-qa.md
