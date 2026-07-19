@@ -197,7 +197,7 @@ Expected: tests and compile exit `0`; commit contains only the email module and 
 - Create: `atguigu_ai/auth/account_repository.py`
 - Modify: `atguigu_ai/auth/__init__.py`
 
-- [ ] **Step 1: Write repository contract tests**
+- [x] **Step 1: Write repository contract tests**
 
 Create tests covering:
 
@@ -211,7 +211,7 @@ Create tests covering:
 - `record_audit()` writes sanitized metadata and rejects metadata containing keys named `password`, `token`, `session`, or `secret`;
 - public exports from `atguigu_ai.auth` preserve all existing names and append repository names.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -221,7 +221,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/auth/test_accou
 
 Expected: collection fails because `atguigu_ai.auth.account_repository` does not exist.
 
-- [ ] **Step 3: Implement repository**
+- [x] **Step 3: Implement repository**
 
 Create `atguigu_ai/auth/account_repository.py` with sync SQLAlchemy code using an injected `sqlalchemy.orm.Session`. Use UUID4 string IDs, timezone-aware UTC timestamps, `Account`, `AuditEvent`, `AccountRole`, `AccountStatus`, and `AuditResult` from `models.py`. Implement:
 
@@ -243,7 +243,7 @@ class AccountRepository:
 
 Do not commit transactions inside repository methods; the service/unit-of-work controls commit and rollback.
 
-- [ ] **Step 4: Run GREEN and regression**
+- [x] **Step 4: Run GREEN and regression**
 
 Run:
 
@@ -254,7 +254,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/auth tests/secu
 
 Expected: all tests pass; no existing public auth export is removed.
 
-- [ ] **Step 5: Commit repository slice**
+- [x] **Step 5: Commit repository slice**
 
 Run:
 
