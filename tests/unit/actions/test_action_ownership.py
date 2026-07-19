@@ -3,8 +3,12 @@ from __future__ import annotations
 import pytest
 
 from ecs_demo.actions.action_logistics import ActionGetLogisticsInfo
-from ecs_demo.actions.action_order import ActionGetOrderDetail
-from ecs_demo.actions.action_postsale import ActionCheckPostsaleEligible
+from ecs_demo.actions.action_order import (
+    ActionAskSetReceiveInfo,
+    ActionCancelOrder,
+    ActionGetOrderDetail,
+)
+from ecs_demo.actions.action_postsale import ActionApplyPostsale, ActionCheckPostsaleEligible
 
 
 class Tracker:
@@ -29,6 +33,37 @@ class Tracker:
     ],
 )
 async def test_query_actions_reject_missing_trusted_identity(action, slots) -> None:
+    result = await action.run(Tracker(slots))
+
+    assert result.responses[0]["text"] == "当前登录身份不可用，请重新登录后再试。"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("action", "slots"),
+    [
+        (ActionCancelOrder(), {"order_id": "order-1", "user_id": "attacker"}),
+        (
+            ActionAskSetReceiveInfo(),
+            {
+                "order_id": "order-1",
+                "receive_id": "receive-1",
+                "set_receive_info": True,
+                "user_id": "attacker",
+            },
+        ),
+        (
+            ActionApplyPostsale(),
+            {
+                "order_id": "order-1",
+                "postsale_type": "退款",
+                "postsale_reason": "不想要了",
+                "user_id": "attacker",
+            },
+        ),
+    ],
+)
+async def test_mutation_actions_reject_missing_trusted_identity(action, slots) -> None:
     result = await action.run(Tracker(slots))
 
     assert result.responses[0]["text"] == "当前登录身份不可用，请重新登录后再试。"

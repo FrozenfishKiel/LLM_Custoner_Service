@@ -238,15 +238,20 @@ class ActionApplyPostsale(Action):
         domain: Optional[Any] = None,
         **kwargs: Any,
     ) -> ActionResult:
+        result = ActionResult()
+        try:
+            context = current_action_user(tracker, **kwargs)
+        except ActionSecurityError:
+            result.add_response("当前登录身份不可用，请重新登录后再试。")
+            return result
+
         from actions.db import SessionLocal
         from actions.db_table_class import Postsale, OrderInfo, PostsaleStatus
         from sqlalchemy.orm import joinedload
-        
-        result = ActionResult()
+
         order_id = tracker.get_slot("order_id")
         postsale_type = tracker.get_slot("postsale_type")  # 退款/退货/换货
         postsale_reason = tracker.get_slot("postsale_reason")
-        user_id = tracker.get_slot("user_id") or "1001"
         
         if not all([order_id, postsale_type, postsale_reason]):
             result.add_response("售后信息不完整，请重新申请。")
@@ -256,9 +261,13 @@ class ActionApplyPostsale(Action):
             with SessionLocal() as session:
                 # 获取订单信息
                 order_info = (
-                    session.query(OrderInfo)
+                    owned_order_query(
+                        session,
+                        OrderInfo,
+                        user_id=context.user_id,
+                        order_id=order_id,
+                    )
                     .options(joinedload(OrderInfo.order_detail))
-                    .filter_by(order_id=order_id)
                     .first()
                 )
                 

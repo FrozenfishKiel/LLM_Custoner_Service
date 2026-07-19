@@ -12,7 +12,13 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from atguigu_ai.agent.actions import Action, ActionResult
-from .security import ActionSecurityError, current_action_user, owned_order_query
+from .security import (
+    ActionSecurityError,
+    audit_metadata,
+    current_action_user,
+    owned_order_query,
+    record_action_audit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -551,11 +557,17 @@ class ActionAskSetReceiveInfo(Action):
         domain: Optional[Any] = None,
         **kwargs: Any,
     ) -> ActionResult:
+        result = ActionResult()
+        try:
+            context = current_action_user(tracker, **kwargs)
+        except ActionSecurityError:
+            result.add_response("当前登录身份不可用，请重新登录后再试。")
+            return result
+
         from actions.db import SessionLocal
         from actions.db_table_class import OrderInfo, ReceiveInfo
         from uuid import uuid4
-        
-        result = ActionResult()
+
         receive_id = tracker.get_slot("receive_id")
         set_receive_info = tracker.get_slot("set_receive_info")
         
@@ -564,7 +576,7 @@ class ActionAskSetReceiveInfo(Action):
             # 从槽中获取收货信息
             receive_info = ReceiveInfo(
                 receive_id="rec" + uuid4().hex[:16],
-                user_id=tracker.get_slot("user_id") or "1001",
+                user_id=context.user_id,
                 receiver_name=tracker.get_slot("receiver_name"),
                 receiver_phone=tracker.get_slot("receiver_phone"),
                 receive_province=tracker.get_slot("receive_province"),
@@ -577,7 +589,12 @@ class ActionAskSetReceiveInfo(Action):
             try:
                 with SessionLocal() as session:
                     receive_info = (
-                        session.query(ReceiveInfo).filter_by(receive_id=receive_id).first()
+                        session.query(ReceiveInfo)
+                        .filter(
+                            ReceiveInfo.receive_id == receive_id,
+                            ReceiveInfo.user_id == context.user_id,
+                        )
+                        .first()
                     )
                     if not receive_info:
                         result.add_response("未找到收货信息，请重新选择。")
@@ -593,7 +610,12 @@ class ActionAskSetReceiveInfo(Action):
             try:
                 with SessionLocal() as session:
                     order_info = (
-                        session.query(OrderInfo).filter_by(order_id=order_id).first()
+                        owned_order_query(
+                            session,
+                            OrderInfo,
+                            user_id=context.user_id,
+                            order_id=order_id,
+                        ).first()
                     )
                     
                     if not order_info:
@@ -671,10 +693,16 @@ class ActionCancelOrder(Action):
         domain: Optional[Any] = None,
         **kwargs: Any,
     ) -> ActionResult:
+        result = ActionResult()
+        try:
+            context = current_action_user(tracker, **kwargs)
+        except ActionSecurityError:
+            result.add_response("当前登录身份不可用，请重新登录后再试。")
+            return result
+
         from actions.db import SessionLocal
         from actions.db_table_class import OrderInfo
-        
-        result = ActionResult()
+
         order_id = tracker.get_slot("order_id")
         
         if not order_id:
@@ -683,18 +711,66 @@ class ActionCancelOrder(Action):
         
         try:
             with SessionLocal() as session:
-                order_info = session.query(OrderInfo).filter_by(order_id=order_id).first()
+                order_info = owned_order_query(
+                    session,
+                    OrderInfo,
+                    user_id=context.user_id,
+                    order_id=order_id,
+                ).first()
                 
                 if not order_info:
+                    record_action_audit(
+                        session,
+                        context=context,
+                        event_type="business.order.cancel",
+                        target_type="order",
+                        target_id=order_id,
+                        result="failure",
+                        metadata=audit_metadata(
+                            action_name=self.name,
+                            reason="not_found_or_not_owned",
+                        ),
+                    )
+                    session.commit()
                     result.add_response("未找到该订单，请检查订单号是否正确。")
                     return result
                 
                 # 获取当前订单状态
                 old_order_status = order_info.order_status
+
+                if old_order_status == "已取消":
+                    record_action_audit(
+                        session,
+                        context=context,
+                        event_type="business.order.cancel",
+                        target_type="order",
+                        target_id=order_id,
+                        result="success",
+                        metadata=audit_metadata(
+                            action_name=self.name,
+                            previous_status=old_order_status,
+                            idempotent=True,
+                        ),
+                    )
+                    session.commit()
+                    result.add_response("订单已取消")
+                    return result
                 
                 # 更新订单状态为已取消
                 order_info.order_status = "已取消"
                 order_info.complete_time = datetime.now()
+                record_action_audit(
+                    session,
+                    context=context,
+                    event_type="business.order.cancel",
+                    target_type="order",
+                    target_id=order_id,
+                    result="success",
+                    metadata=audit_metadata(
+                        action_name=self.name,
+                        previous_status=old_order_status,
+                    ),
+                )
                 session.commit()
             
             # 生成回复消息
