@@ -88,7 +88,7 @@ class AtguiguServer:
             enable_inspect: 是否启用调试页面
         """
         self.agent = agent
-        self.cors_origins = cors_origins or ["*"]
+        self.cors_origins = _resolve_cors_origins(cors_origins, auth_deps is not None)
         self.enable_inspect = enable_inspect
         self.auth_deps = auth_deps
         
@@ -539,3 +539,16 @@ __all__ = [
     "SessionInfo",
     "HealthResponse",
 ]
+
+
+def _resolve_cors_origins(
+    cors_origins: Optional[List[str]],
+    auth_routes_enabled: bool,
+) -> List[str]:
+    if not auth_routes_enabled:
+        return cors_origins or ["*"]
+    if cors_origins is None:
+        return []
+    if "*" in cors_origins:
+        raise ValueError("auth routes require explicit trusted CORS origins")
+    return cors_origins

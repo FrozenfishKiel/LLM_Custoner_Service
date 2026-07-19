@@ -12,7 +12,12 @@ from atguigu_ai.api.dependencies import (
     require_csrf,
     resolve_authenticated_identity,
 )
-from atguigu_ai.auth import AuthServiceUnavailable, InvalidCredentials, InvalidPassword
+from atguigu_ai.auth import (
+    AuthServiceUnavailable,
+    DuplicateRegistration,
+    InvalidCredentials,
+    InvalidPassword,
+)
 
 
 class EmailPasswordRequest(BaseModel):
@@ -45,6 +50,8 @@ def create_auth_router(deps: AuthRouteDependencies) -> APIRouter:
     async def register(payload: EmailPasswordRequest) -> dict[str, bool]:
         try:
             await deps.service.register(payload.email, payload.password)
+            return {"accepted": True}
+        except DuplicateRegistration:
             return {"accepted": True}
         except InvalidPassword as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from None

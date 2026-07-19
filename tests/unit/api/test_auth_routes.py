@@ -13,6 +13,7 @@ from atguigu_ai.auth import (
     AccountRole,
     AccountStatus,
     CreatedSession,
+    DuplicateRegistration,
     InvalidCredentials,
     LoginAccepted,
     PasswordResetAccepted,
@@ -53,6 +54,7 @@ class FakeSessionStore:
 class FakeAuthService:
     def __init__(self) -> None:
         self.login_error: Exception | None = None
+        self.register_error: Exception | None = None
         self.login_calls: list[tuple[str, str]] = []
         self.register_calls: list[tuple[str, str]] = []
         self.logout_calls: list[str] = []
@@ -73,6 +75,8 @@ class FakeAuthService:
 
     async def register(self, email: str, password: str) -> RegistrationAccepted:
         self.register_calls.append((email, password))
+        if self.register_error is not None:
+            raise self.register_error
         return self.register_result
 
     async def verify_email(self, token: str) -> AccountIdentity | None:
@@ -174,6 +178,29 @@ def test_register_returns_accepted_without_cookies() -> None:
     assert response.json()["accepted"] is True
     assert cookie_dump(response) == ""
     assert service.register_calls == [("User@example.com", "correct horse")]
+
+
+def test_register_duplicate_email_remains_enumeration_safe() -> None:
+    client, service, _ = build_client()
+    service.register_error = DuplicateRegistration()
+
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "User@example.com", "password": "correct horse"},
+    )
+
+    assert response.status_code == 202
+    assert response.json() == {"accepted": True}
+    assert cookie_dump(response) == ""
+
+
+def test_auth_routes_reject_wildcard_credentialed_cors() -> None:
+    service = FakeAuthService()
+    sessions = FakeSessionStore()
+    deps = AuthRouteDependencies(service=service, sessions=sessions)
+
+    with pytest.raises(ValueError, match="trusted CORS origins"):
+        create_app(auth_deps=deps, cors_origins=["*"], enable_inspect=False)
 
 
 def test_verify_email_stays_enumeration_safe() -> None:
