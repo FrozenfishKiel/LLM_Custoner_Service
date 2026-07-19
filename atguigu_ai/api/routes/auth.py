@@ -7,7 +7,9 @@ from pydantic import BaseModel
 
 from atguigu_ai.api.dependencies import (
     AuthRouteDependencies,
+    check_rate_limit,
     clear_auth_cookies,
+    client_ip,
     issue_auth_cookies,
     require_csrf,
     resolve_authenticated_identity,
@@ -18,6 +20,18 @@ from atguigu_ai.auth import (
     InvalidCredentials,
     InvalidPassword,
 )
+from atguigu_ai.rate_limit import RateLimitRule
+
+
+REGISTER_IP_RULE = RateLimitRule("auth.register.ip", "auth", 5, 3600)
+LOGIN_IP_EMAIL_RULE = RateLimitRule("auth.login.ip_email", "auth", 5, 900)
+LOGIN_IP_RULE = RateLimitRule("auth.login.ip", "auth", 30, 900)
+FORGOT_PASSWORD_IP_EMAIL_RULE = RateLimitRule("auth.forgot_password.ip_email", "auth", 5, 3600)
+FORGOT_PASSWORD_IP_RULE = RateLimitRule("auth.forgot_password.ip", "auth", 20, 3600)
+RESEND_VERIFICATION_IP_EMAIL_RULE = RateLimitRule("auth.resend_verification.ip_email", "auth", 5, 3600)
+VERIFY_EMAIL_IP_RULE = RateLimitRule("auth.verify_email.ip", "auth", 60, 900)
+RESET_PASSWORD_IP_RULE = RateLimitRule("auth.reset_password.ip", "auth", 20, 900)
+CHANGE_PASSWORD_ACCOUNT_RULE = RateLimitRule("auth.change_password.account", "auth", 5, 900)
 
 
 class EmailPasswordRequest(BaseModel):
@@ -47,7 +61,9 @@ def create_auth_router(deps: AuthRouteDependencies) -> APIRouter:
     router = APIRouter()
 
     @router.post("/api/auth/register", status_code=status.HTTP_202_ACCEPTED)
-    async def register(payload: EmailPasswordRequest) -> dict[str, bool]:
+    async def register(request: Request, payload: EmailPasswordRequest) -> dict[str, bool]:
+        ip = client_ip(request, deps)
+        await check_rate_limit(deps.rate_limiter, REGISTER_IP_RULE, ip)
         try:
             await deps.service.register(payload.email, payload.password)
             return {"accepted": True}
@@ -59,7 +75,9 @@ def create_auth_router(deps: AuthRouteDependencies) -> APIRouter:
             raise _service_unavailable() from None
 
     @router.post("/api/auth/verify-email")
-    async def verify_email(payload: TokenRequest) -> dict[str, bool]:
+    async def verify_email(request: Request, payload: TokenRequest) -> dict[str, bool]:
+        ip = client_ip(request, deps)
+        await check_rate_limit(deps.rate_limiter, VERIFY_EMAIL_IP_RULE, ip)
         try:
             await deps.service.verify_email(payload.token)
             return {"accepted": True}
@@ -67,7 +85,13 @@ def create_auth_router(deps: AuthRouteDependencies) -> APIRouter:
             raise _service_unavailable() from None
 
     @router.post("/api/auth/resend-verification")
-    async def resend_verification(payload: EmailRequest) -> dict[str, bool]:
+    async def resend_verification(request: Request, payload: EmailRequest) -> dict[str, bool]:
+        ip = client_ip(request, deps)
+        await check_rate_limit(
+            deps.rate_limiter,
+            RESEND_VERIFICATION_IP_EMAIL_RULE,
+            _ip_email_subject(ip, payload.email),
+        )
         try:
             await deps.service.resend_verification(payload.email)
             return {"accepted": True}
@@ -75,7 +99,10 @@ def create_auth_router(deps: AuthRouteDependencies) -> APIRouter:
             raise _service_unavailable() from None
 
     @router.post("/api/auth/login")
-    async def login(payload: EmailPasswordRequest, response: Response) -> dict[str, str]:
+    async def login(request: Request, payload: EmailPasswordRequest, response: Response) -> dict[str, str]:
+        ip = client_ip(request, deps)
+        await check_rate_limit(deps.rate_limiter, LOGIN_IP_EMAIL_RULE, _ip_email_subject(ip, payload.email))
+        await check_rate_limit(deps.rate_limiter, LOGIN_IP_RULE, ip)
         try:
             accepted = await deps.service.login(payload.email, payload.password)
         except InvalidCredentials:
@@ -113,7 +140,14 @@ def create_auth_router(deps: AuthRouteDependencies) -> APIRouter:
         return response
 
     @router.post("/api/auth/forgot-password")
-    async def forgot_password(payload: EmailRequest) -> dict[str, bool]:
+    async def forgot_password(request: Request, payload: EmailRequest) -> dict[str, bool]:
+        ip = client_ip(request, deps)
+        await check_rate_limit(
+            deps.rate_limiter,
+            FORGOT_PASSWORD_IP_EMAIL_RULE,
+            _ip_email_subject(ip, payload.email),
+        )
+        await check_rate_limit(deps.rate_limiter, FORGOT_PASSWORD_IP_RULE, ip)
         try:
             await deps.service.forgot_password(payload.email)
             return {"accepted": True}
@@ -121,7 +155,9 @@ def create_auth_router(deps: AuthRouteDependencies) -> APIRouter:
             raise _service_unavailable() from None
 
     @router.post("/api/auth/reset-password")
-    async def reset_password(payload: ResetPasswordRequest) -> dict[str, bool]:
+    async def reset_password(request: Request, payload: ResetPasswordRequest) -> dict[str, bool]:
+        ip = client_ip(request, deps)
+        await check_rate_limit(deps.rate_limiter, RESET_PASSWORD_IP_RULE, ip)
         try:
             await deps.service.reset_password(payload.token, payload.new_password)
             return {"accepted": True}
@@ -134,6 +170,7 @@ def create_auth_router(deps: AuthRouteDependencies) -> APIRouter:
     async def change_password(request: Request, payload: ChangePasswordRequest, response: Response) -> Response:
         require_csrf(request, deps)
         identity = await _require_identity(request, deps)
+        await check_rate_limit(deps.rate_limiter, CHANGE_PASSWORD_ACCOUNT_RULE, identity.account_id)
         try:
             await deps.service.change_password(
                 identity.account_id,
@@ -179,6 +216,10 @@ def _identity_response(identity) -> dict[str, str]:
         "role": identity.role.value,
         "status": identity.status.value,
     }
+
+
+def _ip_email_subject(ip: str, email: str) -> str:
+    return f"{ip}:{email.strip().lower()}"
 
 
 def _service_unavailable() -> HTTPException:

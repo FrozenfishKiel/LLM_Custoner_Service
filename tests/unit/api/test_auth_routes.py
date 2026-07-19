@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,6 +20,7 @@ from atguigu_ai.auth import (
     PasswordResetAccepted,
     RegistrationAccepted,
 )
+from atguigu_ai.rate_limit import RateLimitStoreUnavailable
 
 
 NOW = datetime(2026, 7, 18, 12, 0, tzinfo=timezone.utc)
@@ -108,12 +110,49 @@ class FakeAuthService:
         self.change_password_calls.append((account_id, current_password, new_password))
 
 
-def build_client(*, service: FakeAuthService | None = None, sessions: FakeSessionStore | None = None) -> tuple[TestClient, FakeAuthService, FakeSessionStore]:
+class FakeRateLimiter:
+    def __init__(self) -> None:
+        self.blocked_rules: set[str] = set()
+        self.unavailable_rules: set[str] = set()
+        self.calls: list[tuple[str, str]] = []
+
+    async def check(self, rule, subject: str):
+        self.calls.append((rule.name, subject))
+        if rule.name in self.unavailable_rules:
+            raise RateLimitStoreUnavailable()
+        allowed = rule.name not in self.blocked_rules
+        return SimpleNamespace(
+            allowed=allowed,
+            limit=rule.limit,
+            remaining=rule.limit - 1 if allowed else 0,
+            retry_after_seconds=0 if allowed else 60,
+            reset_after_seconds=60,
+            rule_name=rule.name,
+        )
+
+
+def build_client(
+    *,
+    service: FakeAuthService | None = None,
+    sessions: FakeSessionStore | None = None,
+    rate_limiter: FakeRateLimiter | None = None,
+) -> tuple[TestClient, FakeAuthService, FakeSessionStore, FakeRateLimiter | None]:
     auth_service = service or FakeAuthService()
     auth_sessions = sessions or FakeSessionStore()
-    deps = AuthRouteDependencies(service=auth_service, sessions=auth_sessions)
+    deps = AuthRouteDependencies(
+        service=auth_service,
+        sessions=auth_sessions,
+        rate_limiter=rate_limiter,
+        client_ip_resolver=lambda request: "203.0.113.10",
+    )
     app = create_app(auth_deps=deps, enable_inspect=False)
-    return TestClient(app, base_url="https://testserver"), auth_service, auth_sessions
+    return TestClient(app, base_url="https://testserver"), auth_service, auth_sessions, rate_limiter
+
+
+def build_client_with_rate_limiter() -> tuple[TestClient, FakeAuthService, FakeSessionStore, FakeRateLimiter]:
+    limiter = FakeRateLimiter()
+    client, service, sessions, _ = build_client(rate_limiter=limiter)
+    return client, service, sessions, limiter
 
 
 def cookie_dump(response) -> str:
@@ -128,7 +167,7 @@ def cookie_line(response, name: str) -> str:
 
 
 def test_login_sets_session_and_csrf_cookies_and_returns_identity() -> None:
-    client, service, _ = build_client()
+    client, service, _, _ = build_client()
 
     response = client.post(
         "/api/auth/login",
@@ -154,7 +193,7 @@ def test_login_sets_session_and_csrf_cookies_and_returns_identity() -> None:
 
 
 def test_login_failure_does_not_set_cookies() -> None:
-    client, service, _ = build_client()
+    client, service, _, _ = build_client()
     service.login_error = InvalidCredentials()
 
     response = client.post(
@@ -167,7 +206,7 @@ def test_login_failure_does_not_set_cookies() -> None:
 
 
 def test_register_returns_accepted_without_cookies() -> None:
-    client, service, _ = build_client()
+    client, service, _, _ = build_client()
 
     response = client.post(
         "/api/auth/register",
@@ -181,7 +220,7 @@ def test_register_returns_accepted_without_cookies() -> None:
 
 
 def test_register_duplicate_email_remains_enumeration_safe() -> None:
-    client, service, _ = build_client()
+    client, service, _, _ = build_client()
     service.register_error = DuplicateRegistration()
 
     response = client.post(
@@ -194,6 +233,55 @@ def test_register_duplicate_email_remains_enumeration_safe() -> None:
     assert cookie_dump(response) == ""
 
 
+def test_register_rate_limit_blocks_before_service_call() -> None:
+    client, service, _, limiter = build_client_with_rate_limiter()
+    limiter.blocked_rules.add("auth.register.ip")
+
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "User@example.com", "password": "correct horse"},
+    )
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    assert service.register_calls == []
+    assert limiter.calls == [("auth.register.ip", "203.0.113.10")]
+
+
+def test_login_checks_ip_email_and_ip_rules_before_service_call() -> None:
+    client, service, _, limiter = build_client_with_rate_limiter()
+    limiter.blocked_rules.add("auth.login.ip_email")
+
+    response = client.post(
+        "/api/auth/login",
+        json={"email": "User@example.com", "password": "correct horse"},
+    )
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    assert service.login_calls == []
+    assert cookie_dump(response) == ""
+    assert len(limiter.calls) == 1
+    rule_name, subject = limiter.calls[0]
+    assert rule_name == "auth.login.ip_email"
+    assert "203.0.113.10" in subject
+    assert "user@example.com" in subject
+
+
+def test_login_ip_rule_blocks_after_ip_email_rule_allows() -> None:
+    client, service, _, limiter = build_client_with_rate_limiter()
+    limiter.blocked_rules.add("auth.login.ip")
+
+    response = client.post(
+        "/api/auth/login",
+        json={"email": "User@example.com", "password": "correct horse"},
+    )
+
+    assert response.status_code == 429
+    assert service.login_calls == []
+    assert [rule for rule, _ in limiter.calls] == ["auth.login.ip_email", "auth.login.ip"]
+
+
 def test_auth_routes_reject_wildcard_credentialed_cors() -> None:
     service = FakeAuthService()
     sessions = FakeSessionStore()
@@ -204,7 +292,7 @@ def test_auth_routes_reject_wildcard_credentialed_cors() -> None:
 
 
 def test_verify_email_stays_enumeration_safe() -> None:
-    client, service, _ = build_client()
+    client, service, _, _ = build_client()
     service.verify_email_result = None
 
     known = client.post("/api/auth/verify-email", json={"token": "known-token"})
@@ -217,7 +305,7 @@ def test_verify_email_stays_enumeration_safe() -> None:
 
 
 def test_resend_verification_stays_enumeration_safe() -> None:
-    client, service, _ = build_client()
+    client, service, _, _ = build_client()
 
     response = client.post("/api/auth/resend-verification", json={"email": "User@example.com"})
 
@@ -227,8 +315,19 @@ def test_resend_verification_stays_enumeration_safe() -> None:
     assert service.resend_verification_calls == ["User@example.com"]
 
 
+def test_resend_verification_rate_limit_is_enumeration_safe() -> None:
+    client, service, _, limiter = build_client_with_rate_limiter()
+    limiter.blocked_rules.add("auth.resend_verification.ip_email")
+
+    response = client.post("/api/auth/resend-verification", json={"email": "User@example.com"})
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    assert service.resend_verification_calls == []
+
+
 def test_forgot_password_stays_enumeration_safe() -> None:
-    client, service, _ = build_client()
+    client, service, _, _ = build_client()
 
     known = client.post("/api/auth/forgot-password", json={"email": "User@example.com"})
     unknown = client.post("/api/auth/forgot-password", json={"email": "missing@example.com"})
@@ -239,8 +338,19 @@ def test_forgot_password_stays_enumeration_safe() -> None:
     assert service.forgot_password_calls == ["User@example.com", "missing@example.com"]
 
 
+def test_forgot_password_rate_limit_blocks_before_service_call() -> None:
+    client, service, _, limiter = build_client_with_rate_limiter()
+    limiter.blocked_rules.add("auth.forgot_password.ip_email")
+
+    response = client.post("/api/auth/forgot-password", json={"email": "User@example.com"})
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    assert service.forgot_password_calls == []
+
+
 def test_reset_password_stays_enumeration_safe() -> None:
-    client, service, _ = build_client()
+    client, service, _, _ = build_client()
 
     known = client.post(
         "/api/auth/reset-password",
@@ -260,8 +370,31 @@ def test_reset_password_stays_enumeration_safe() -> None:
     ]
 
 
+def test_verify_and_reset_password_use_ip_rate_limit_without_token_subject() -> None:
+    client, service, _, limiter = build_client_with_rate_limiter()
+    limiter.blocked_rules.add("auth.verify_email.ip")
+
+    verify = client.post("/api/auth/verify-email", json={"token": "secret-token"})
+
+    assert verify.status_code == 429
+    assert service.verify_email_calls == []
+    assert limiter.calls == [("auth.verify_email.ip", "203.0.113.10")]
+
+    limiter.blocked_rules.clear()
+    limiter.calls.clear()
+    limiter.blocked_rules.add("auth.reset_password.ip")
+    reset = client.post(
+        "/api/auth/reset-password",
+        json={"token": "secret-token", "new_password": "new correct horse"},
+    )
+
+    assert reset.status_code == 429
+    assert service.reset_password_calls == []
+    assert limiter.calls == [("auth.reset_password.ip", "203.0.113.10")]
+
+
 def test_change_password_requires_matching_csrf_header() -> None:
-    client, service, _ = build_client()
+    client, service, _, _ = build_client()
 
     response = client.post(
         "/api/auth/change-password",
@@ -277,7 +410,7 @@ def test_change_password_requires_matching_csrf_header() -> None:
 
 
 def test_change_password_requires_session_delegates_and_clears_cookies() -> None:
-    client, service, _ = build_client()
+    client, service, _, _ = build_client()
 
     missing_session = client.post(
         "/api/auth/change-password",
@@ -309,8 +442,43 @@ def test_change_password_requires_session_delegates_and_clears_cookies() -> None
     ]
 
 
+def test_change_password_rate_limit_uses_authenticated_account_after_csrf() -> None:
+    client, service, _, limiter = build_client_with_rate_limiter()
+    limiter.blocked_rules.add("auth.change_password.account")
+
+    response = client.post(
+        "/api/auth/change-password",
+        cookies={"auth_session": "session-token", "auth_csrf": "csrf-token"},
+        headers={"X-CSRF-Token": "csrf-token"},
+        json={
+            "current_password": "old correct horse",
+            "new_password": "new correct horse",
+        },
+    )
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    assert service.change_password_calls == []
+    assert limiter.calls == [("auth.change_password.account", "account-1")]
+
+
+def test_rate_limiter_outage_returns_sanitized_503_before_service_call() -> None:
+    client, service, _, limiter = build_client_with_rate_limiter()
+    limiter.unavailable_rules.add("auth.register.ip")
+
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "User@example.com", "password": "correct horse"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Rate limit service is unavailable"}
+    assert "redis" not in response.text.lower()
+    assert service.register_calls == []
+
+
 def test_logout_requires_csrf_and_clears_cookies() -> None:
-    client, service, _ = build_client()
+    client, service, _, _ = build_client()
 
     forbidden = client.post("/api/auth/logout", cookies={"auth_session": "session-token"})
     assert forbidden.status_code == 403
@@ -330,7 +498,7 @@ def test_logout_requires_csrf_and_clears_cookies() -> None:
 
 
 def test_logout_with_csrf_is_noop_without_session() -> None:
-    client, service, _ = build_client()
+    client, service, _, _ = build_client()
 
     response = client.post(
         "/api/auth/logout",
@@ -345,7 +513,7 @@ def test_logout_with_csrf_is_noop_without_session() -> None:
 
 @pytest.mark.parametrize("session_token", [None, "missing-token"])
 def test_account_me_rejects_missing_or_invalid_session(session_token: str | None) -> None:
-    client, _, _ = build_client()
+    client, _, _, _ = build_client()
     cookies = {"auth_session": session_token} if session_token is not None else {}
 
     response = client.get("/api/account/me", cookies=cookies)
@@ -354,7 +522,7 @@ def test_account_me_rejects_missing_or_invalid_session(session_token: str | None
 
 
 def test_account_me_reads_identity_from_session_cookie() -> None:
-    client, _, _ = build_client()
+    client, _, _, _ = build_client()
 
     response = client.get("/api/account/me", cookies={"auth_session": "session-token"})
 
