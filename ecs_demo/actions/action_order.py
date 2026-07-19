@@ -647,7 +647,21 @@ class ActionAskSetReceiveInfo(Action):
                             session.flush()
                     
                     # 更新订单的收货信息
+                    old_receive_id = order_info.receive_id
                     order_info.receive_id = receive_info.receive_id
+                    record_action_audit(
+                        session,
+                        context=context,
+                        event_type="business.address.change",
+                        target_type="order",
+                        target_id=order_id,
+                        result="success",
+                        metadata=audit_metadata(
+                            action_name=self.name,
+                            previous_receive_id=old_receive_id,
+                            receive_id=receive_info.receive_id,
+                        ),
+                    )
                     session.commit()
                 
                 result.add_response("订单收货信息已修改")

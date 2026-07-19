@@ -16,7 +16,7 @@ ECS_DEMO = ROOT / "ecs_demo"
 if str(ECS_DEMO) not in sys.path:
     sys.path.insert(0, str(ECS_DEMO))
 
-from actions.action_order import ActionCancelOrder
+from actions.action_order import ActionAskSetReceiveInfo, ActionCancelOrder
 from actions.action_postsale import ActionApplyPostsale
 from actions.db_table_class import (
     Base,
@@ -125,6 +125,16 @@ def _seed_two_users(session_factory: sessionmaker) -> None:
                     receive_district="西湖区",
                     receive_street_address="二号路",
                 ),
+                ReceiveInfo(
+                    receive_id="receive-a2",
+                    user_id="user-a",
+                    receiver_name="用户A新地址",
+                    receiver_phone="13000000003",
+                    receive_province="浙江省",
+                    receive_city="杭州市",
+                    receive_district="西湖区",
+                    receive_street_address="三号路",
+                ),
                 Account(
                     account_id="account-a",
                     email="a@example.test",
@@ -222,6 +232,56 @@ async def test_cancel_order_is_owned_idempotent_and_audited(action_db_fixture) -
         ("business.order.cancel", "success", "order-a"),
         ("business.order.cancel", "success", "order-a"),
         ("business.order.cancel", "failure", "order-b"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_change_address_is_owned_and_audited(action_db_fixture) -> None:
+    action = ActionAskSetReceiveInfo()
+
+    success = await action.run(
+        Tracker(
+            {
+                "order_id": "order-a",
+                "receive_id": "receive-a2",
+                "set_receive_info": True,
+            }
+        ),
+        account_id="account-a",
+        user_id="user-a",
+        account_role="consumer",
+        request_id="request-address-1",
+    )
+    crossed = await action.run(
+        Tracker(
+            {
+                "order_id": "order-a",
+                "receive_id": "receive-b",
+                "set_receive_info": True,
+            }
+        ),
+        account_id="account-a",
+        user_id="user-a",
+        account_role="consumer",
+        request_id="request-address-2",
+    )
+
+    assert success.responses[0]["text"] == "订单收货信息已修改"
+    assert crossed.responses[0]["text"] == "未找到收货信息，请重新选择。"
+
+    with Session(action_db_fixture.session_factory.kw["bind"]) as session:
+        receive_id = session.scalar(
+            select(OrderInfo.receive_id).where(OrderInfo.order_id == "order-a")
+        )
+        audit_events = session.execute(
+            select(AuditEvent)
+            .where(AuditEvent.event_type == "business.address.change")
+            .order_by(AuditEvent.request_id)
+        ).scalars().all()
+
+    assert receive_id == "receive-a2"
+    assert [(event.result, event.target_id) for event in audit_events] == [
+        ("success", "order-a")
     ]
 
 
