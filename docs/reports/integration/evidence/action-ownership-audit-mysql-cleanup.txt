@@ -1,0 +1,3 @@
+SHOW DATABASES LIKE llm_cs_test_%
+[]
+count=0

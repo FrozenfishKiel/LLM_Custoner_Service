@@ -279,6 +279,7 @@ class ActionApplyPostsale(Action):
             result.add_response("售后信息不完整，请重新申请。")
             return result
         
+        session = None
         try:
             with SessionLocal() as session:
                 # 获取订单信息
@@ -290,6 +291,7 @@ class ActionApplyPostsale(Action):
                         order_id=order_id,
                     )
                     .options(joinedload(OrderInfo.order_detail))
+                    .with_for_update(of=OrderInfo)
                     .first()
                 )
                 
@@ -401,6 +403,8 @@ class ActionApplyPostsale(Action):
                 f"我们会在1-3个工作日内处理，请耐心等待。"
             )
         except Exception as e:
+            if session is not None:
+                session.rollback()
             logger.error(f"提交售后申请失败: {e}")
             result.add_response("提交申请时出错，请稍后重试。")
         

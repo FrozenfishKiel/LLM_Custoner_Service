@@ -1,0 +1,1 @@
+warning: in the working copy of 'tests/integration/test_action_ownership_audit.py', LF will be replaced by CRLF the next time Git touches it

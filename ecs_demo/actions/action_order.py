@@ -614,6 +614,19 @@ class ActionAskSetReceiveInfo(Action):
                         .first()
                     )
                     if not receive_info:
+                        record_action_audit(
+                            session,
+                            context=context,
+                            event_type="business.address.change",
+                            target_type="receive_info",
+                            target_id=receive_id,
+                            result="failure",
+                            metadata=audit_metadata(
+                                action_name=self.name,
+                                reason="receive_not_found_or_not_owned",
+                            ),
+                        )
+                        session.commit()
                         result.add_response("未找到收货信息，请重新选择。")
                         return result
             except Exception as e:
@@ -624,6 +637,7 @@ class ActionAskSetReceiveInfo(Action):
         # 如果确认修改，执行修改
         if set_receive_info:
             order_id = tracker.get_slot("order_id")
+            session = None
             try:
                 with SessionLocal() as session:
                     order_info = (
@@ -636,6 +650,20 @@ class ActionAskSetReceiveInfo(Action):
                     )
                     
                     if not order_info:
+                        record_action_audit(
+                            session,
+                            context=context,
+                            event_type="business.address.change",
+                            target_type="order",
+                            target_id=order_id,
+                            result="failure",
+                            metadata=audit_metadata(
+                                action_name=self.name,
+                                reason="order_not_found_or_not_owned",
+                                receive_id=receive_info.receive_id,
+                            ),
+                        )
+                        session.commit()
                         result.add_response("未找到订单，请重新操作。")
                         return result
                     
@@ -685,6 +713,8 @@ class ActionAskSetReceiveInfo(Action):
                 logger.info(f"订单 {order_id} 收货信息更新为: {receive_info.receive_id}")
                 
             except Exception as e:
+                if session is not None:
+                    session.rollback()
                 logger.error(f"修改收货信息失败: {e}")
                 result.add_response("修改失败，请稍后重试。")
         else:
@@ -740,6 +770,7 @@ class ActionCancelOrder(Action):
             result.add_response("订单信息丢失，请重新操作。")
             return result
         
+        session = None
         try:
             with SessionLocal() as session:
                 order_info = owned_order_query(
@@ -814,6 +845,8 @@ class ActionCancelOrder(Action):
             logger.info(f"订单 {order_id} 已取消，原状态: {old_order_status}")
             
         except Exception as e:
+            if session is not None:
+                session.rollback()
             logger.error(f"取消订单失败: {e}")
             result.add_response("取消失败，请稍后重试。")
         

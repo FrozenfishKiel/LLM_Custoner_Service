@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import inspect
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -16,20 +17,32 @@ ECS_DEMO = ROOT / "ecs_demo"
 if str(ECS_DEMO) not in sys.path:
     sys.path.insert(0, str(ECS_DEMO))
 
-from actions.action_order import ActionAskSetReceiveInfo, ActionCancelOrder
-from actions.action_postsale import ActionApplyPostsale
+from actions.action_logistics import ActionGetLogisticsInfo
+from actions.action_order import (
+    ActionAskSetReceiveInfo,
+    ActionCancelOrder,
+    ActionGetOrderDetail,
+)
+from actions.action_postsale import (
+    ActionApplyPostsale,
+    ActionAskPostsaleReason,
+    ActionCheckPostsaleEligible,
+)
 from actions.db_table_class import (
     Base,
+    Logistics,
     OrderDetail,
     OrderInfo,
     OrderStatus,
     Postsale,
+    PostsaleReason,
     PostsaleStatus,
     ProductCategory,
     ReceiveInfo,
     Region,
     SkuInfo,
     UserInfo,
+    t_order_logistics,
 )
 from atguigu_ai.auth import Account, AccountUserBinding, AuditEvent
 from tests.integration.test_account_migration import (
@@ -90,6 +103,7 @@ def _seed_two_users(session_factory: sessionmaker) -> None:
                 OrderStatus(order_status="待发货", status_code=310),
                 OrderStatus(order_status="已取消", status_code=100),
                 OrderStatus(order_status="售后中", status_code=400),
+                OrderStatus(order_status="delivered-test", status_code=330),
                 PostsaleStatus(
                     postsale_status="退款待审核",
                     is_refund=1,
@@ -97,6 +111,7 @@ def _seed_two_users(session_factory: sessionmaker) -> None:
                     is_exchange=0,
                     status_code=410,
                 ),
+                ProductCategory(product_category="phone-test"),
                 ProductCategory(product_category="手机"),
                 SkuInfo(
                     sku_id="sku-a",
@@ -104,6 +119,21 @@ def _seed_two_users(session_factory: sessionmaker) -> None:
                     sku_price=Decimal("1999.00"),
                     sku_category="手机",
                     sku_count=10,
+                ),
+                SkuInfo(
+                    sku_id="sku-b",
+                    sku_name="secret-sku-b",
+                    sku_price=Decimal("2999.00"),
+                    sku_category="phone-test",
+                    sku_count=10,
+                ),
+                PostsaleReason(
+                    postsale_reason="defect-test-reason",
+                    product_category=None,
+                ),
+                PostsaleReason(
+                    postsale_reason="secret-cross-user-reason",
+                    product_category=None,
                 ),
                 ReceiveInfo(
                     receive_id="receive-a",
@@ -166,7 +196,8 @@ def _seed_two_users(session_factory: sessionmaker) -> None:
                     create_time=now,
                     user_id="user-b",
                     receive_id="receive-b",
-                    order_status="待发货",
+                    order_status="delivered-test",
+                    delivered_time=now,
                 ),
                 OrderDetail(
                     order_detail_id="detail-a",
@@ -178,7 +209,30 @@ def _seed_two_users(session_factory: sessionmaker) -> None:
                     final_amount=Decimal("1999.00"),
                     discount_amount=Decimal("0.00"),
                 ),
+                OrderDetail(
+                    order_detail_id="detail-b",
+                    order_id="order-b",
+                    sku_id="sku-b",
+                    sku_name="secret-sku-b",
+                    sku_count=1,
+                    total_amount=Decimal("2999.00"),
+                    final_amount=Decimal("2999.00"),
+                    discount_amount=Decimal("0.00"),
+                ),
+                Logistics(
+                    logistics_id="logistics-b",
+                    create_time=now,
+                    delivered_time=now,
+                    logistics_tracking="secret-cross-user-tracking",
+                ),
             ]
+        )
+        session.flush()
+        session.execute(
+            t_order_logistics.insert().values(
+                order_id="order-b",
+                logistics_id="logistics-b",
+            )
         )
         session.commit()
 
@@ -226,7 +280,7 @@ async def test_cancel_order_is_owned_idempotent_and_audited(action_db_fixture) -
         temp_db_count = session.execute(text("SELECT 1")).scalar()
 
     assert order_a_status == "已取消"
-    assert order_b_status == "待发货"
+    assert order_b_status == "delivered-test"
     assert temp_db_count == 1
     assert [(event.event_type, event.result, event.target_id) for event in audit_events] == [
         ("business.order.cancel", "success", "order-a"),
@@ -265,6 +319,19 @@ async def test_change_address_is_owned_and_audited(action_db_fixture) -> None:
         account_role="consumer",
         request_id="request-address-2",
     )
+    crossed_order = await action.run(
+        Tracker(
+            {
+                "order_id": "order-b",
+                "receive_id": "receive-a2",
+                "set_receive_info": True,
+            }
+        ),
+        account_id="account-a",
+        user_id="user-a",
+        account_role="consumer",
+        request_id="request-address-3",
+    )
 
     assert success.responses[0]["text"] == "订单收货信息已修改"
     assert crossed.responses[0]["text"] == "未找到收货信息，请重新选择。"
@@ -281,7 +348,9 @@ async def test_change_address_is_owned_and_audited(action_db_fixture) -> None:
 
     assert receive_id == "receive-a2"
     assert [(event.result, event.target_id) for event in audit_events] == [
-        ("success", "order-a")
+        ("success", "order-a"),
+        ("failure", "receive-b"),
+        ("failure", "order-b"),
     ]
 
 
@@ -337,9 +406,59 @@ async def test_apply_postsale_is_owned_idempotent_and_audited(action_db_fixture)
     assert len(postsale_rows) == 1
     assert postsale_rows[0].order_detail_id == "detail-a"
     assert order_a_status == "售后中"
-    assert order_b_status == "待发货"
+    assert order_b_status == "delivered-test"
     assert [(event.result, event.target_id) for event in audit_events] == [
         ("success", "order-a"),
         ("success", "order-a"),
         ("failure", "order-b"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_read_actions_do_not_leak_cross_user_order_data(action_db_fixture) -> None:
+    shared_kwargs = {
+        "account_id": "account-a",
+        "user_id": "user-a",
+        "account_role": "consumer",
+        "request_id": "request-read-cross",
+    }
+
+    detail = await ActionGetOrderDetail().run(
+        Tracker({"order_id": "order-b"}),
+        **shared_kwargs,
+    )
+    logistics = await ActionGetLogisticsInfo().run(
+        Tracker({"order_id": "order-b"}),
+        **shared_kwargs,
+    )
+    eligible = await ActionCheckPostsaleEligible().run(
+        Tracker({"order_id": "order-b"}),
+        **shared_kwargs,
+    )
+    reason = await ActionAskPostsaleReason().run(
+        Tracker({"order_id": "order-b"}),
+        **shared_kwargs,
+    )
+
+    combined_text = "\n".join(
+        response["text"]
+        for result in [detail, logistics, eligible, reason]
+        for response in result.responses
+    )
+
+    assert "order-b" not in combined_text
+    assert "detail-b" not in combined_text
+    assert "secret-sku-b" not in combined_text
+    assert "logistics-b" not in combined_text
+    assert "secret-cross-user-tracking" not in combined_text
+    assert "secret-cross-user-reason" not in combined_text
+    assert "defect-test-reason" not in combined_text
+
+
+def test_apply_postsale_locks_owned_order_before_idempotency_check() -> None:
+    source = inspect.getsource(ActionApplyPostsale.run)
+
+    lock_position = source.index(".with_for_update(")
+    existing_check_position = source.index("existing_postsales =")
+
+    assert lock_position < existing_check_position
