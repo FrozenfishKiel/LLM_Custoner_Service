@@ -395,6 +395,18 @@ order_id + current_user_id
 
 物流、地址和售后对象同样执行归属校验。模型输出的 `user_id`、前端传入的 `user_id` 和对话中的“切换用户”请求均不得覆盖登录身份。
 
+当前 Action 归属硬化已经落地到 `ecs_demo.actions`。生产 Action 从 chat route 注入的可信 metadata 获取 `account_id`、`user_id`、`account_role` 和 `request_id`；缺失可信身份时 fail closed，返回重新登录提示，不再回退 tracker 槽中的 `user_id` 或课程默认用户 `1001`。订单详情、物流查询、地址选择、售后资格、售后原因、修改地址、取消订单和提交售后均按当前业务用户过滤业务对象。
+
+关键写操作复用 `audit_event` 表：
+
+```text
+business.address.change -> 修改订单收货信息
+business.order.cancel   -> 取消订单
+business.postsale.apply -> 提交售后申请
+```
+
+取消订单对已取消订单返回幂等成功，不重复修改订单状态；提交售后对同一订单明细、同一售后类型和同一原因复用已有申请，不重复创建售后记录。写操作在同一数据库事务中完成归属校验、业务状态修改和审计写入；业务失败但数据库可用时记录 failure 审计，数据库异常时回滚并返回脱敏错误。
+
 ## 9. HTTP接口
 
 ### 9.1 公开认证接口
