@@ -1,0 +1,2 @@
+COMMAND: D:\Anaconda3\envs\ai-content-ops\python.exe -m compileall -q atguigu_ai/agent atguigu_ai/core atguigu_ai/shared tests/unit/agent tests/unit/core tests/integration
+EXIT_CODE: 0

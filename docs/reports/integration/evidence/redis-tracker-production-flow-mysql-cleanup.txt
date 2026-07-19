@@ -1,0 +1,5 @@
+COMMAND: MySQL cleanup and stuck-query check through project database URL
+EXIT_CODE: 0
+
+TEMP_DBS 0 []
+STUCK_TEST_QUERIES 0

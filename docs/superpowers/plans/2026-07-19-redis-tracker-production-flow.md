@@ -49,7 +49,7 @@
 - 创建 `tests/unit/core/test_redis_tracker_store.py`
 - 创建 `tests/unit/core/test_tracker_store_factory.py`
 
-- [ ] **Step 1：写 RedisTrackerStore 单元失败测试**
+- [x] **Step 1：写 RedisTrackerStore 单元失败测试**
 
 在 `tests/unit/core/test_redis_tracker_store.py` 中定义一个 async fake Redis：
 
@@ -139,7 +139,7 @@ def test_ttl_must_be_positive_integer() -> None:
         RedisTrackerStore(redis_client=RecordingRedis(), ttl_seconds=0)
 ```
 
-- [ ] **Step 2：写工厂失败测试**
+- [x] **Step 2：写工厂失败测试**
 
 在 `tests/unit/core/test_tracker_store_factory.py` 中覆盖：
 
@@ -166,7 +166,7 @@ def test_tracker_store_config_parses_redis_options() -> None:
     assert config.ttl_seconds == 3600
 ```
 
-- [ ] **Step 3：运行 RED**
+- [x] **Step 3：运行 RED**
 
 ```powershell
 D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/core/test_redis_tracker_store.py tests/unit/core/test_tracker_store_factory.py -q
@@ -174,7 +174,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/core/test_redis
 
 预期：collection 或 import 失败，因为 `RedisTrackerStore` 和 `TRACKER_STORE_REDIS` 尚不存在。
 
-- [ ] **Step 4：提交 RED**
+- [x] **Step 4：提交 RED**
 
 ```powershell
 git add tests/unit/core/test_redis_tracker_store.py tests/unit/core/test_tracker_store_factory.py
@@ -191,7 +191,7 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "test: define
 - 修改 `atguigu_ai/shared/constants.py`
 - 修改 `atguigu_ai/shared/config.py`
 
-- [ ] **Step 1：实现 RedisTrackerStore**
+- [x] **Step 1：实现 RedisTrackerStore**
 
 实现要点：
 
@@ -217,7 +217,7 @@ class RedisTrackerStore(TrackerStore):
 - `_client()`：如果注入 client，直接返回；否则用 `redis.asyncio.Redis.from_url()` 或 host/port/db 创建。
 - `_map_error()`：统一抛脱敏 TrackerStore 异常。
 
-- [ ] **Step 2：更新工厂和配置**
+- [x] **Step 2：更新工厂和配置**
 
 更新：
 
@@ -231,7 +231,7 @@ key_prefix: str = "tracker:"
 ttl_seconds: Optional[int] = None
 ```
 
-- [ ] **Step 3：运行 GREEN**
+- [x] **Step 3：运行 GREEN**
 
 ```powershell
 D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/core/test_redis_tracker_store.py tests/unit/core/test_tracker_store_factory.py -q
@@ -240,7 +240,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m compileall -q atguigu_ai/core atg
 git diff --check
 ```
 
-- [ ] **Step 4：提交 GREEN**
+- [x] **Step 4：提交 GREEN**
 
 ```powershell
 git add atguigu_ai/core/stores/redis_store.py atguigu_ai/core/stores/__init__.py atguigu_ai/shared/constants.py atguigu_ai/shared/config.py tests/unit/core/test_redis_tracker_store.py tests/unit/core/test_tracker_store_factory.py
@@ -255,7 +255,7 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "feat: add re
 - 修改 `atguigu_ai/agent/agent.py`
 - 创建 `tests/unit/agent/test_agent_production_flows.py`
 
-- [ ] **Step 1：写生产 Flow 过滤失败测试**
+- [x] **Step 1：写生产 Flow 过滤失败测试**
 
 测试用临时项目目录创建最小 `domain.yml`、`data/flows/flow_order.yml`、`endpoints.yml`。
 
@@ -280,7 +280,7 @@ def test_agent_load_passes_full_tracker_store_config(tmp_path) -> None:
     assert agent.tracker_store.ttl_seconds == 120
 ```
 
-- [ ] **Step 2：实现 AgentConfig 与过滤**
+- [x] **Step 2：实现 AgentConfig 与过滤**
 
 在 `AgentConfig` 增加：
 
@@ -303,7 +303,7 @@ def _filter_demo_identity_flows(flows: FlowsList, *, allow: bool) -> None:
 
 在 `Agent.load()` 加载 flows 后调用该过滤函数。
 
-- [ ] **Step 3：完整传递 tracker store 配置**
+- [x] **Step 3：完整传递 tracker store 配置**
 
 替换旧逻辑：
 
@@ -332,7 +332,7 @@ tracker_kwargs = {key: value for key, value in tracker_kwargs.items() if value i
 tracker_store = create_tracker_store(tracker_store_config.type, **tracker_kwargs)
 ```
 
-- [ ] **Step 4：运行测试**
+- [x] **Step 4：运行测试**
 
 ```powershell
 D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/agent/test_agent_production_flows.py tests/unit/core/test_tracker_store_factory.py -q
@@ -341,7 +341,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m compileall -q atguigu_ai/agent at
 git diff --check
 ```
 
-- [ ] **Step 5：提交**
+- [x] **Step 5：提交**
 
 ```powershell
 git add atguigu_ai/agent/agent.py tests/unit/agent/test_agent_production_flows.py
@@ -356,7 +356,7 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "fix: disable
 - 创建 `tests/integration/test_redis_tracker_store.py`
 - 修改 `docs/TECHNICAL_DESIGN.md`
 
-- [ ] **Step 1：写真实 Redis 集成测试**
+- [x] **Step 1：写真实 Redis 集成测试**
 
 复用 `tests/integration/test_redis_session.py` 的 owned Redis 容器 helper。
 
@@ -371,14 +371,14 @@ async def test_redis_tracker_store_outage_is_sanitized(...)
 
 测试必须在 finally 中恢复 Redis 容器并清空 DB15。
 
-- [ ] **Step 2：运行集成与 cleanup**
+- [x] **Step 2：运行集成与 cleanup**
 
 ```powershell
 D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/integration/test_redis_tracker_store.py -q -s -m integration
 docker exec llm-cs-redis redis-cli -n 15 DBSIZE
 ```
 
-- [ ] **Step 3：更新中文技术设计**
+- [x] **Step 3：更新中文技术设计**
 
 在 `docs/TECHNICAL_DESIGN.md` 记录：
 
@@ -387,7 +387,7 @@ docker exec llm-cs-redis redis-cli -n 15 DBSIZE
 - `switch_user_id` 作为 demo-only flow，生产默认过滤。
 - 课程 demo 可以显式开启。
 
-- [ ] **Step 4：提交集成**
+- [x] **Step 4：提交集成**
 
 ```powershell
 git add tests/integration/test_redis_tracker_store.py docs/TECHNICAL_DESIGN.md
@@ -404,7 +404,7 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "test: cover 
 - 创建 `docs/reports/integration/evidence/redis-tracker-production-flow-independent-qa.md`
 - 更新本计划 checkbox 为完成状态。
 
-- [ ] **Step 1：保存验证证据**
+- [x] **Step 1：保存验证证据**
 
 运行并保存为 UTF-8 无 BOM：
 
@@ -418,7 +418,7 @@ git diff --check
 docker exec llm-cs-redis redis-cli -n 15 DBSIZE
 ```
 
-- [ ] **Step 2：做 scoped secret scan**
+- [x] **Step 2：做 scoped secret scan**
 
 扫描本 slice 源码、测试、中文文档和 evidence：
 
@@ -430,11 +430,11 @@ docker exec llm-cs-redis redis-cli -n 15 DBSIZE
 - raw session/csrf cookie
 - Redis tracker JSON 中不应出现真实 secret
 
-- [ ] **Step 3：独立 QA**
+- [x] **Step 3：独立 QA**
 
 复用或新建 QA agent，要求重跑 targeted unit、integration、regression、full suite、compileall、diff check、Redis cleanup、UTF-8 evidence、secret scan。必须无 Critical/Important finding。
 
-- [ ] **Step 4：写中文报告并提交**
+- [x] **Step 4：写中文报告并提交**
 
 报告必须包含：
 

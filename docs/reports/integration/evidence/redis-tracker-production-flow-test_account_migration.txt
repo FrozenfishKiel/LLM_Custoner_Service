@@ -1,0 +1,6 @@
+COMMAND: D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests\integration\test_account_migration.py -q -s
+EXIT_CODE: TIMEOUT_120S
+
+STDOUT:
+
+STDERR:

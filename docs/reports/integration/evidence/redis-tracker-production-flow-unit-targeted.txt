@@ -1,0 +1,5 @@
+COMMAND: D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/core/test_redis_tracker_store.py tests/unit/core/test_tracker_store_factory.py tests/unit/agent/test_agent_production_flows.py -q
+EXIT_CODE: 0
+
+...............                                                          [100%]
+15 passed in 1.50s

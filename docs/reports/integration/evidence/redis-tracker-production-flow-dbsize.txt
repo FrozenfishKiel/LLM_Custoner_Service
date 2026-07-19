@@ -1,0 +1,4 @@
+COMMAND: docker exec llm-cs-redis redis-cli -n 15 DBSIZE
+EXIT_CODE: 0
+
+0

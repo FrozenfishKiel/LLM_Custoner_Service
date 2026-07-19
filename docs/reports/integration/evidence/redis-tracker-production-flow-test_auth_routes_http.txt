@@ -1,0 +1,6 @@
+COMMAND: D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests\integration\test_auth_routes_http.py -q -s
+EXIT_CODE: TIMEOUT_180S
+
+STDOUT:
+
+STDERR:

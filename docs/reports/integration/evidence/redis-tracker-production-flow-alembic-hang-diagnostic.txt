@@ -1,0 +1,23 @@
+importing helpers
+enter mysql ctx
+Timeout (0:00:30)!
+Thread 0x00007d90 (most recent call first):
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\ssl.py", line 1103 in read
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\ssl.py", line 1251 in recv_into
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\socket.py", line 720 in readinto
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\site-packages\pymysql\connections.py", line 810 in _read_bytes
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\site-packages\pymysql\connections.py", line 772 in _read_packet
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\site-packages\pymysql\connections.py", line 1245 in read
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\site-packages\pymysql\connections.py", line 847 in _read_query_result
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\site-packages\pymysql\connections.py", line 582 in query
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\site-packages\pymysql\cursors.py", line 330 in _query
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\site-packages\pymysql\cursors.py", line 159 in execute
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\site-packages\sqlalchemy\engine\default.py", line 952 in do_execute
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\site-packages\sqlalchemy\engine\base.py", line 1969 in _exec_single_context
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\site-packages\sqlalchemy\engine\base.py", line 1848 in _execute_context
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\site-packages\sqlalchemy\engine\base.py", line 1643 in _execute_clauseelement
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\site-packages\sqlalchemy\sql\elements.py", line 526 in _execute_on_connection
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\site-packages\sqlalchemy\engine\base.py", line 1421 in execute
+  File "D:\Projects\llm_customer_service\tests\integration\test_account_migration.py", line 69 in _isolated_mysql_database
+  File "D:\Anaconda3\envs\ai-content-ops\Lib\contextlib.py", line 137 in __enter__
+  File "<stdin>", line 14 in <module>

@@ -1,0 +1,5 @@
+COMMAND: D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/integration/test_redis_tracker_store.py -q -s -m integration
+EXIT_CODE: 0
+
+....
+4 passed in 21.55s
