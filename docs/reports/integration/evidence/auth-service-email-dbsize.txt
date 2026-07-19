@@ -1,0 +1,11 @@
+Redis DB15 DBSIZE:
+0
+
+MySQL temp databases llm_cs_test_%:
+
+
+Course data counts after MySQL rebuild and demo-data regeneration:
+user_info=10
+order_info=200
+receive_info=30
+postsale=13

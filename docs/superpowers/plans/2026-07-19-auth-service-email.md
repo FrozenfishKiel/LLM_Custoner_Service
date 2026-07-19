@@ -399,10 +399,13 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "test: cover 
 - Create: `docs/reports/integration/evidence/auth-service-email-integration.txt`
 - Create: `docs/reports/integration/evidence/auth-service-email-regression.txt`
 - Create: `docs/reports/integration/evidence/auth-service-email-full-suite.txt`
+- Create: `docs/reports/integration/evidence/auth-service-email-compileall.txt`
+- Create: `docs/reports/integration/evidence/auth-service-email-whitespace.txt`
 - Create: `docs/reports/integration/evidence/auth-service-email-secret-scan.txt`
 - Create: `docs/reports/integration/evidence/auth-service-email-dbsize.txt`
+- Create: `docs/reports/integration/evidence/auth-service-email-independent-qa.md`
 
-- [ ] **Step 1: Run and capture verification commands**
+- [x] **Step 1: Run and capture verification commands**
 
 Run and retain UTF-8 evidence:
 
@@ -418,24 +421,24 @@ docker exec llm-cs-redis redis-cli -n 15 DBSIZE
 
 Expected: all tests/compile/whitespace checks exit `0`; Redis DB15 is `0`. If MySQL container is stopped, start the existing `llm-cs-mysql` container for the full suite and stop it back to its prior state after the run.
 
-- [ ] **Step 2: Run scoped secret scan**
+- [x] **Step 2: Run scoped secret scan**
 
 Run a scoped scan over changed planned artifacts for private keys, credential-bearing Redis URLs, SMTP passwords, raw reset/verification tokens, and `sk-*` token shapes. Fixture-only URLs or tokens must be either absent or explicitly documented as non-secret deterministic test fixtures.
 
-- [ ] **Step 3: Independent QA review**
+- [x] **Step 3: Independent QA review**
 
 Dispatch/reuse a QA agent to rerun focused unit, integration, full regression, secret scan, MySQL temp database cleanup, Redis DB15 cleanup, and evidence UTF-8 checks. Require no open Critical/Important findings.
 
-- [ ] **Step 4: Write report and complete plan**
+- [x] **Step 4: Write report and complete plan**
 
 Write `docs/reports/integration/2026-07-19-auth-service-email.md` summarizing command results, quantitative timings, dependency behavior, and residual risks. Check every evidence `.txt` with strict UTF-8 decoding. Mark all checkboxes complete only after the review gate passes.
 
-- [ ] **Step 5: Final commit**
+- [x] **Step 5: Final commit**
 
 Run:
 
 ```powershell
-git add atguigu_ai/auth/account_repository.py atguigu_ai/auth/service.py atguigu_ai/auth/__init__.py atguigu_ai/email/__init__.py atguigu_ai/email/delivery.py tests/unit/auth/test_account_repository.py tests/unit/auth/test_auth_service.py tests/unit/email/test_delivery.py tests/integration/test_auth_service_mysql_redis.py docs/TECHNICAL_DESIGN.md docs/superpowers/plans/2026-07-19-auth-service-email.md docs/reports/integration/2026-07-19-auth-service-email.md docs/reports/integration/evidence/auth-service-email-unit.txt docs/reports/integration/evidence/auth-service-email-integration.txt docs/reports/integration/evidence/auth-service-email-regression.txt docs/reports/integration/evidence/auth-service-email-full-suite.txt docs/reports/integration/evidence/auth-service-email-secret-scan.txt docs/reports/integration/evidence/auth-service-email-dbsize.txt
+git add atguigu_ai/auth/account_repository.py atguigu_ai/auth/service.py atguigu_ai/auth/__init__.py atguigu_ai/email/__init__.py atguigu_ai/email/delivery.py tests/unit/auth/test_account_repository.py tests/unit/auth/test_auth_service.py tests/unit/email/test_delivery.py tests/integration/test_auth_service_mysql_redis.py docs/TECHNICAL_DESIGN.md docs/superpowers/plans/2026-07-19-auth-service-email.md docs/reports/integration/2026-07-19-auth-service-email.md docs/reports/integration/evidence/auth-service-email-unit.txt docs/reports/integration/evidence/auth-service-email-integration.txt docs/reports/integration/evidence/auth-service-email-regression.txt docs/reports/integration/evidence/auth-service-email-full-suite.txt docs/reports/integration/evidence/auth-service-email-compileall.txt docs/reports/integration/evidence/auth-service-email-whitespace.txt docs/reports/integration/evidence/auth-service-email-secret-scan.txt docs/reports/integration/evidence/auth-service-email-dbsize.txt docs/reports/integration/evidence/auth-service-email-independent-qa.md
 git diff --cached --check
 git -c user.name=Codex -c user.email=codex@local.invalid commit -m "docs: record authentication service verification"
 git show --stat --oneline HEAD
