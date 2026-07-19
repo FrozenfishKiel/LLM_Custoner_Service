@@ -39,6 +39,8 @@ async def test_first_request_is_allowed_and_key_contains_only_digest():
     assert len(redis.calls) == 1
     script, numkeys, values = redis.calls[0]
     assert "INCR" in script
+    assert "if count == 1 then\n  redis.call('EXPIRE', key, window)\nend" in script
+    assert script.count("EXPIRE") == 1
     assert numkeys == 1
     key = values[0]
     assert key.startswith("rate:auth:auth.login.ip_email:")
@@ -120,6 +122,20 @@ def test_rule_rejects_invalid_configuration(name, scope, limit, window_seconds):
 def test_subject_digest_rejects_invalid_subjects(subject):
     with pytest.raises(ValueError):
         subject_digest(subject)
+
+
+def test_subject_digest_rejects_overlong_subjects():
+    with pytest.raises(ValueError):
+        subject_digest("x" * 513)
+
+
+def test_subject_digest_accepts_special_characters_without_returning_them():
+    digest = subject_digest("ip=2001:db8::1 email=user+tag@example.com")
+
+    assert ":" not in digest
+    assert "@" not in digest
+    assert "+" not in digest
+    assert len(digest) == 64
 
 
 def test_subject_digest_never_returns_raw_subject():

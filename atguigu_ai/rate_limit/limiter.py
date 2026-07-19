@@ -70,7 +70,7 @@ def subject_digest(subject: object) -> str:
     if not isinstance(subject, str):
         raise ValueError("rate limit subject is required")
     clean = subject.strip()
-    if not clean:
+    if not clean or len(clean) > 512:
         raise ValueError("rate limit subject is required")
     return hashlib.sha256(clean.encode("utf-8")).hexdigest()
 
