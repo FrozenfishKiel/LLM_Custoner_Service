@@ -7,8 +7,8 @@ $ErrorActionPreference = "Stop"
 
 $RootDir = $PSScriptRoot
 $DemoDir = Join-Path $RootDir "ecs_demo"
-$PythonExe = "D:\Anaconda3\envs\ai-content-ops\python.exe"
-$CliExe = "D:\Anaconda3\envs\ai-content-ops\Scripts\atguigu.exe"
+$PythonExe = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "python" }
+$CliExe = if ($env:ATGUIGU_CLI_EXE) { $env:ATGUIGU_CLI_EXE } else { "atguigu" }
 $ServicePort = 8012
 $MysqlContainer = "llm-cs-mysql"
 $Neo4jContainer = "llm-cs-neo4j"
@@ -24,6 +24,24 @@ function Assert-PathExists {
     if (-not (Test-Path -LiteralPath $Path)) {
         throw "Missing required path: $Path"
     }
+}
+
+function Resolve-Executable {
+    param(
+        [string]$Command,
+        [string]$InstallHint
+    )
+
+    if (Test-Path -LiteralPath $Command) {
+        return (Resolve-Path -LiteralPath $Command).Path
+    }
+
+    $resolved = Get-Command $Command -ErrorAction SilentlyContinue
+    if ($resolved) {
+        return $resolved.Source
+    }
+
+    throw "Executable '$Command' was not found. $InstallHint"
 }
 
 function Get-DockerDesktopExe {
@@ -174,9 +192,9 @@ function Start-Service {
     }
 }
 
-Assert-PathExists $PythonExe
-Assert-PathExists $CliExe
 Assert-PathExists $DemoDir
+$PythonExe = Resolve-Executable $PythonExe "Create a Python environment, run 'python -m pip install -r requirements-atguigu.txt', or set PYTHON_EXE to the full python.exe path."
+$CliExe = Resolve-Executable $CliExe "Install this project into the active Python environment with 'python -m pip install -e .' or set ATGUIGU_CLI_EXE to the full atguigu executable path."
 
 Ensure-DockerDesktop
 Ensure-Containers

@@ -13,12 +13,17 @@ ecs_demo/models/
 course_assets/
 trackers/
 *.log
+*.tmp
+*.bak
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
+.eggs/
+build/
+dist/
 .pytest_cache/
 .coverage
 .coverage.*
@@ -37,6 +42,8 @@ ENV/
 .vscode/
 *.swp
 *.swo
+.DS_Store
+Thumbs.db
 
 # Generated test artifacts
 /artifacts/generated/
