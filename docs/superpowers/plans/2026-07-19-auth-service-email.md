@@ -350,7 +350,7 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "feat: add au
 - Create: `tests/integration/test_auth_service_mysql_redis.py`
 - Modify: `docs/TECHNICAL_DESIGN.md`
 
-- [ ] **Step 1: Write integration tests**
+- [x] **Step 1: Write integration tests**
 
 Use the existing isolated MySQL database helper pattern from `tests/integration/test_account_migration.py` and the owned Redis DB15 harness from `tests/integration/test_redis_session.py`. Cover:
 
@@ -366,7 +366,7 @@ Use the existing isolated MySQL database helper pattern from `tests/integration/
 - email delivery outage during registration rolls back pending account creation;
 - DB cleanup leaves zero `llm_cs_test_%` databases and Redis DB15 size zero.
 
-- [ ] **Step 2: Run focused integration**
+- [x] **Step 2: Run focused integration**
 
 Run:
 
@@ -377,11 +377,11 @@ docker exec llm-cs-redis redis-cli -n 15 DBSIZE
 
 Expected: integration tests pass and DB15 is `0`.
 
-- [ ] **Step 3: Update technical design**
+- [x] **Step 3: Update technical design**
 
 Add a short subsection under Auth module describing the concrete `AuthService` transaction ordering implemented by this slice and explicitly stating HTTP routes, cookies, CSRF, demo-data initialization, and real SMTP configuration remain later slices.
 
-- [ ] **Step 4: Commit integration slice**
+- [x] **Step 4: Commit integration slice**
 
 Run:
 
