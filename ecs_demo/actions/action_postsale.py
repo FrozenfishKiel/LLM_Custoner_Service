@@ -12,7 +12,13 @@ from datetime import datetime
 from uuid import uuid4
 
 from atguigu_ai.agent.actions import Action, ActionResult
-from .security import ActionSecurityError, current_action_user, owned_order_query
+from .security import (
+    ActionSecurityError,
+    audit_metadata,
+    current_action_user,
+    owned_order_query,
+    record_action_audit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -272,7 +278,58 @@ class ActionApplyPostsale(Action):
                 )
                 
                 if not order_info:
+                    record_action_audit(
+                        session,
+                        context=context,
+                        event_type="business.postsale.apply",
+                        target_type="order",
+                        target_id=order_id,
+                        result="failure",
+                        metadata=audit_metadata(
+                            action_name=self.name,
+                            reason="not_found_or_not_owned",
+                            postsale_type=postsale_type,
+                        ),
+                    )
+                    session.commit()
                     result.add_response("未找到该订单。")
+                    return result
+
+                order_detail_ids = [
+                    detail.order_detail_id for detail in order_info.order_detail
+                ]
+                existing_postsales = (
+                    session.query(Postsale)
+                    .filter(
+                        Postsale.order_detail_id.in_(order_detail_ids),
+                        Postsale.postsale_type == postsale_type,
+                        Postsale.postsale_reason == postsale_reason,
+                    )
+                    .all()
+                )
+                if existing_postsales:
+                    record_action_audit(
+                        session,
+                        context=context,
+                        event_type="business.postsale.apply",
+                        target_type="order",
+                        target_id=order_id,
+                        result="success",
+                        metadata=audit_metadata(
+                            action_name=self.name,
+                            postsale_type=postsale_type,
+                            idempotent=True,
+                        ),
+                    )
+                    session.commit()
+                    type_text = {"退款": "退款", "退货": "退货退款", "换货": "换货"}.get(postsale_type, "售后")
+                    result.add_response(
+                        f"您的{type_text}申请已提交！\n\n"
+                        f"- 订单号: {order_id}\n"
+                        f"- 申请类型: {postsale_type}\n"
+                        f"- 申请原因: {postsale_reason}\n\n"
+                        f"我们会在1-3个工作日内处理，请耐心等待。"
+                    )
                     return result
                 
                 # 确定初始售后状态
@@ -301,6 +358,19 @@ class ActionApplyPostsale(Action):
                 
                 # 更新订单状态为售后中
                 order_info.order_status = "售后中"
+                record_action_audit(
+                    session,
+                    context=context,
+                    event_type="business.postsale.apply",
+                    target_type="order",
+                    target_id=order_id,
+                    result="success",
+                    metadata=audit_metadata(
+                        action_name=self.name,
+                        postsale_type=postsale_type,
+                        postsale_count=len(created_postsales),
+                    ),
+                )
                 
                 session.commit()
                 

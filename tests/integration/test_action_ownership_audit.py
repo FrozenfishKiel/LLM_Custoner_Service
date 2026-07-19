@@ -17,11 +17,14 @@ if str(ECS_DEMO) not in sys.path:
     sys.path.insert(0, str(ECS_DEMO))
 
 from actions.action_order import ActionCancelOrder
+from actions.action_postsale import ActionApplyPostsale
 from actions.db_table_class import (
     Base,
     OrderDetail,
     OrderInfo,
     OrderStatus,
+    Postsale,
+    PostsaleStatus,
     ProductCategory,
     ReceiveInfo,
     Region,
@@ -86,6 +89,14 @@ def _seed_two_users(session_factory: sessionmaker) -> None:
                 Region(province="浙江省", city="杭州市", district="西湖区"),
                 OrderStatus(order_status="待发货", status_code=310),
                 OrderStatus(order_status="已取消", status_code=100),
+                OrderStatus(order_status="售后中", status_code=400),
+                PostsaleStatus(
+                    postsale_status="退款待审核",
+                    is_refund=1,
+                    is_return=0,
+                    is_exchange=0,
+                    status_code=410,
+                ),
                 ProductCategory(product_category="手机"),
                 SkuInfo(
                     sku_id="sku-a",
@@ -211,4 +222,64 @@ async def test_cancel_order_is_owned_idempotent_and_audited(action_db_fixture) -
         ("business.order.cancel", "success", "order-a"),
         ("business.order.cancel", "success", "order-a"),
         ("business.order.cancel", "failure", "order-b"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_apply_postsale_is_owned_idempotent_and_audited(action_db_fixture) -> None:
+    action = ActionApplyPostsale()
+    slots = {
+        "order_id": "order-a",
+        "postsale_type": "退款",
+        "postsale_reason": "不想要了",
+    }
+
+    first = await action.run(
+        Tracker(dict(slots)),
+        account_id="account-a",
+        user_id="user-a",
+        account_role="consumer",
+        request_id="request-postsale-1",
+    )
+    second = await action.run(
+        Tracker(dict(slots)),
+        account_id="account-a",
+        user_id="user-a",
+        account_role="consumer",
+        request_id="request-postsale-2",
+    )
+    crossed = await action.run(
+        Tracker({**slots, "order_id": "order-b"}),
+        account_id="account-a",
+        user_id="user-a",
+        account_role="consumer",
+        request_id="request-postsale-3",
+    )
+
+    assert "申请已提交" in first.responses[0]["text"]
+    assert "申请已提交" in second.responses[0]["text"]
+    assert crossed.responses[0]["text"] == "未找到该订单。"
+
+    with Session(action_db_fixture.session_factory.kw["bind"]) as session:
+        postsale_rows = session.execute(select(Postsale)).scalars().all()
+        order_a_status = session.scalar(
+            select(OrderInfo.order_status).where(OrderInfo.order_id == "order-a")
+        )
+        order_b_status = session.scalar(
+            select(OrderInfo.order_status).where(OrderInfo.order_id == "order-b")
+        )
+        audit_events = session.execute(
+            select(AuditEvent)
+            .where(AuditEvent.event_type == "business.postsale.apply")
+            .order_by(AuditEvent.request_id)
+        ).scalars().all()
+
+    assert len(postsale_rows) == 1
+    assert postsale_rows[0].order_detail_id == "detail-a"
+    assert order_a_status == "售后中"
+    assert order_b_status == "待发货"
+    assert [(event.result, event.target_id) for event in audit_events] == [
+        ("success", "order-a"),
+        ("success", "order-a"),
+        ("failure", "order-b"),
     ]
