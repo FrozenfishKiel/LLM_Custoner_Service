@@ -10,6 +10,7 @@
 - auth route 接入注册、登录、忘记密码、重发验证、验证邮箱、重置密码、改密码限流。
 - chat route 接入消息发送和 reset 限流。
 - 关键写 Action 接入 account_id + action_name 限流。
+- 新增生产 auth deps/app wiring：生产入口会创建共享 Redis client，并把 `RedisRateLimiter` 注入 `AuthRouteDependencies`。
 - 增加真实 Redis 并发、TTL、key 安全、错误类型风险测试。
 
 本轮没有修改数据库 schema，没有引入第三方限流库。
@@ -77,6 +78,9 @@ rate_limit_ttl_first=60 second=59
 D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/rate_limit tests/unit/api/test_auth_routes.py tests/unit/api/test_chat_routes.py tests/unit/actions -q
 85 passed, 39 warnings
 
+D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/api/test_production_dependencies.py tests/unit/api/test_auth_routes.py tests/unit/api/test_chat_routes.py tests/unit/rate_limit -q
+70 passed, 39 warnings
+
 D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests -q -m "not integration"
 325 passed, 82 deselected, 39 warnings
 
@@ -128,6 +132,6 @@ git diff --check
 
 ## 剩余风险
 
-- 当前生产 app wiring 还没有统一创建并注入 `RedisRateLimiter`。本 slice 已完成模块和 route/action seam，后续上线配置任务必须把生产 Redis client 接入 `AuthRouteDependencies.rate_limiter`。
+- 生产 auth deps/app wiring 已接入 `RedisRateLimiter`；部署时仍必须提供正确的 `REDIS_URL`、MySQL、SMTP 和 `AUTH_PUBLIC_BASE_URL` 环境变量。
 - `X-RateLimit-Reset` 现在由应用进程 `time.time()` 计算 Unix timestamp；多实例部署时如果系统时间漂移，header 可能轻微偏差，但阻断行为由 Redis TTL 决定。
 - 本轮没有实现 Prometheus exporter，只固定了可接入指标名称。
