@@ -93,7 +93,7 @@ async def test_resolver_rejects_stale_session_when_bound_account_is_not_active()
 @pytest.mark.asyncio
 async def test_resolver_maps_repository_outage_to_unavailable() -> None:
     repository = FakeBindingRepository(BoundBusinessUser(user_id="business-user-1"))
-    repository.error = RuntimeError("mysql://customer:secret@db/internal")
+    repository.error = RuntimeError("internal MySQL binding outage detail")
     resolver = BusinessIdentityResolver(repository)
 
     with pytest.raises(BusinessUserBindingUnavailable) as captured:

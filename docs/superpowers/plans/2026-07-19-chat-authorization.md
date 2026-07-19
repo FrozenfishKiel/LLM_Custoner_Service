@@ -47,7 +47,7 @@
 - Create `tests/unit/auth/test_business_identity.py`
 - Create `tests/unit/api/test_chat_routes.py`
 
-- [ ] **Step 1: Write resolver tests**
+- [x] **Step 1: Write resolver tests**
 
 Cover:
 
@@ -58,7 +58,7 @@ async def test_resolver_rejects_pending_or_disabled_account(...)
 async def test_resolver_maps_repository_outage_to_unavailable(...)
 ```
 
-- [ ] **Step 2: Write chat route tests**
+- [x] **Step 2: Write chat route tests**
 
 Cover:
 
@@ -72,7 +72,7 @@ def test_chat_reset_requires_csrf_and_resets_only_authenticated_tracker()
 def test_dependency_outage_returns_sanitized_503()
 ```
 
-- [ ] **Step 3: Run RED**
+- [x] **Step 3: Run RED**
 
 ```powershell
 D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/auth/test_business_identity.py tests/unit/api/test_chat_routes.py -q
@@ -80,7 +80,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/auth/test_busin
 
 Expected: collection or test failures because resolver and router do not exist.
 
-- [ ] **Step 4: Commit RED**
+- [x] **Step 4: Commit RED**
 
 ```powershell
 git add tests/unit/auth/test_business_identity.py tests/unit/api/test_chat_routes.py
@@ -99,7 +99,7 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "test: define
 - Modify `atguigu_ai/api/__init__.py`
 - Modify unit tests as needed only to align names with implementation.
 
-- [ ] **Step 1: Implement binding resolver**
+- [x] **Step 1: Implement binding resolver**
 
 Add repository read for `account_user_binding` joined/validated with `account`.
 
@@ -111,7 +111,7 @@ Implement `BusinessIdentityResolver.resolve(account_identity)`:
 - maps SQLAlchemy/repository failures to `BusinessUserBindingUnavailable`;
 - does not expose raw DB errors.
 
-- [ ] **Step 2: Implement chat router**
+- [x] **Step 2: Implement chat router**
 
 Create route dependency dataclass:
 
@@ -131,7 +131,7 @@ Route behavior:
 - call Agent with `sender_id=f"account:{account_id}"`;
 - return existing message response objects.
 
-- [ ] **Step 3: Run GREEN**
+- [x] **Step 3: Run GREEN**
 
 ```powershell
 D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/auth/test_business_identity.py tests/unit/api/test_chat_routes.py -q
@@ -140,7 +140,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m compileall -q atguigu_ai/auth atg
 git diff --check
 ```
 
-- [ ] **Step 4: Commit GREEN**
+- [x] **Step 4: Commit GREEN**
 
 ```powershell
 git add atguigu_ai/auth/account_repository.py atguigu_ai/auth/business_identity.py atguigu_ai/auth/__init__.py atguigu_ai/api/routes/chat.py atguigu_ai/api/server.py atguigu_ai/api/__init__.py tests/unit/auth/test_business_identity.py tests/unit/api/test_chat_routes.py
@@ -155,7 +155,7 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "feat: add au
 - Modify `docs/TECHNICAL_DESIGN.md`
 - Optionally modify existing test harness helpers only if needed for deterministic readiness.
 
-- [ ] **Step 1: Write integration tests**
+- [x] **Step 1: Write integration tests**
 
 Use real MySQL account/binding rows and Redis sessions. Use `httpx.AsyncClient` with ASGI transport.
 
@@ -173,14 +173,14 @@ Cover:
 - MySQL resolver outage maps to sanitized 503;
 - Redis DB15 and MySQL temp DB cleanup are zero in finalizer/post-check.
 
-- [ ] **Step 2: Run integration and cleanup**
+- [x] **Step 2: Run integration and cleanup**
 
 ```powershell
 D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/integration/test_chat_authorization_http.py -q -s -m integration
 docker exec llm-cs-redis redis-cli -n 15 DBSIZE
 ```
 
-- [ ] **Step 3: Update technical design**
+- [x] **Step 3: Update technical design**
 
 Document:
 
@@ -190,7 +190,7 @@ Document:
 - request identity fields ignored/rejected;
 - legacy demo route remains non-production.
 
-- [ ] **Step 4: Commit integration**
+- [x] **Step 4: Commit integration**
 
 ```powershell
 git add tests/integration/test_chat_authorization_http.py docs/TECHNICAL_DESIGN.md
@@ -205,7 +205,7 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "test: cover 
 - Create evidence files under `docs/reports/integration/evidence/chat-authorization-*.txt`
 - Create `docs/reports/integration/evidence/chat-authorization-independent-qa.md`
 
-- [ ] **Step 1: Capture verification evidence**
+- [x] **Step 1: Capture verification evidence**
 
 Run and save:
 
@@ -219,15 +219,15 @@ git diff --check
 docker exec llm-cs-redis redis-cli -n 15 DBSIZE
 ```
 
-- [ ] **Step 2: Run scoped secret scan**
+- [x] **Step 2: Run scoped secret scan**
 
 Scan chat auth source/tests/docs/evidence for private keys, real API tokens, credential-bearing DB URLs, SMTP passwords, raw session/CSRF/token leaks.
 
-- [ ] **Step 3: Independent QA**
+- [x] **Step 3: Independent QA**
 
 QA must rerun targeted unit, integration, regression, full suite, compileall, whitespace, cleanup, evidence UTF-8, and secret scan.
 
-- [ ] **Step 4: Write report and final commit**
+- [x] **Step 4: Write report and final commit**
 
 ```powershell
 git add docs/superpowers/specs/2026-07-19-chat-auth-design.md docs/superpowers/plans/2026-07-19-chat-authorization.md docs/reports/integration/2026-07-19-chat-authorization.md docs/reports/integration/evidence/chat-authorization-*.txt docs/reports/integration/evidence/chat-authorization-independent-qa.md

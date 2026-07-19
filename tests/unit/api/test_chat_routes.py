@@ -316,7 +316,7 @@ def test_chat_reset_returns_403_for_pending_or_disabled_account() -> None:
 
 def test_session_dependency_outage_returns_sanitized_503() -> None:
     client, agent, sessions, _ = build_client()
-    sessions.error = RuntimeError("redis://customer:secret@cache/internal")
+    sessions.error = RuntimeError("internal Redis session outage detail")
 
     response = authenticated_request(client, "/api/chat/messages", {"message": "hello"})
 
