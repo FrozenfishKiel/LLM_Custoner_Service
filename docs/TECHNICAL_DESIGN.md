@@ -301,6 +301,18 @@ reset_conversation(identity) -> None
 
 ### 7.3 Redis键设计
 
+Credential-token additions in this slice:
+
+```text
+auth:credential_token_current:{purpose}:{account_id} -> current token_hash for one account/purpose, TTL matches token
+```
+
+`atguigu_ai.auth.RedisCredentialTokenStore` manages short-lived email-verification and password-reset proofs. A raw credential token is exactly 43 ASCII base64url characters generated from 32 random bytes; Redis keys and values never receive the raw token, only its lowercase SHA-256 digest. Each account has at most one current token per purpose, tracked by `auth:credential_token_current:{purpose}:{account_id}`.
+
+Issuing a token is a single standalone-Redis Lua operation. It checks both purpose namespaces for digest collision, replaces only a prior same-purpose token owned by the same account, and cleans corrupt current-index state only within the current account/purpose scope. A corrupt index must never delete a token owned by another account. Consumption is purpose-bound, at-most-once, and fail-closed: wrong types, missing indexes, non-positive TTLs, digest mismatches, and malformed account replies delete only the directly addressed token and any current index that is proven to point at that digest.
+
+Redis connection, timeout, response, and script errors raise only `CredentialTokenStoreUnavailable("Credential token store is unavailable")`. There is no in-memory fallback. Public forgot-password, resend, verify, and reset routes must keep enumeration-safe responses while recording internal dependency metrics.
+
 ```text
 auth:session:{token_hash}                 -> account identity、generation和时间，TTL 7天
 auth:account_sessions:{account_id}        -> 当前token_hash集合，TTL随Session延长
@@ -335,6 +347,12 @@ Session的创建、解析、单个撤销和账号全量撤销使用短Lua脚本�
 - 登录失败返回统一错误，不区分邮箱不存在和密码错误。
 - 修改或重置密码后撤销该账号全部既有Session。
 
+
+`PasswordPolicy` accepts only Python strings containing 8 through 128 Unicode scalar values. It does not trim or normalize input and rejects C0 controls, DEL, and surrogate code points. `PasswordHasher` uses Argon2id with 64 MiB memory, time cost 3, parallelism 4, 32-byte hashes, and 16-byte salts. Hashing and verification run off the event loop through process-level limiters: four worker slots and twenty admitted jobs; the twenty-first job fails immediately with `PasswordHashingOverloaded`.
+
+Malformed, unsupported, noncanonical, or over-cap stored password hashes are capped and parsed before Argon2 sees them. Verification of those hashes performs one dummy Argon2 verification and returns `False`; policy-invalid submitted passwords return `False` without Argon2 work.
+
+Login, password change, password reset, account disable, and account deletion must serialize on the same MySQL account row with `SELECT ... FOR UPDATE`. Password reset consumes the Redis reset token first, then opens the account transaction, locks the row, calls `revoke_all` while holding that lock, writes the new password hash, and commits. A consumed token is never restored after downstream failure; public responses must not claim success when durable mutation did not complete.
 ### 8.2 Session
 
 - 服务端生成至少256位随机Session ID。

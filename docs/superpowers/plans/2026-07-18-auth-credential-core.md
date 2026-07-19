@@ -39,7 +39,7 @@ This plan does not add MySQL queries, schema changes, HTTP routes, SMTP, rate li
 - Modify: `requirements-atguigu.txt`
 - Create: `tests/unit/auth/test_credentials.py`
 
-- [ ] **Step 1: Declare the three bounded runtime dependencies**
+- [x] **Step 1: Declare the three bounded runtime dependencies**
 
 Insert immediately after the existing redis-py dependency in `requirements-atguigu.txt`:
 
@@ -50,7 +50,7 @@ argon2-cffi>=23.1.0,<26.0.0
 anyio>=4.4.0,<5.0.0
 ```
 
-- [ ] **Step 2: Install only the new dependency ranges and print non-secret versions**
+- [x] **Step 2: Install only the new dependency ranges and print non-secret versions**
 
 Run:
 
@@ -61,7 +61,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -c "import importlib.metadata as m; 
 
 Expected: both commands exit `0`; the second prints versions inside all three declared ranges and no package is imported from outside `D:\Anaconda3\envs\ai-content-ops`.
 
-- [ ] **Step 3: Create the complete credentials unit contract**
+- [x] **Step 3: Create the complete credentials unit contract**
 
 Create `tests/unit/auth/test_credentials.py` with this content:
 
@@ -325,7 +325,7 @@ def test_public_password_interface_is_exact():
     }
 ```
 
-- [ ] **Step 4: Run the focused RED test**
+- [x] **Step 4: Run the focused RED test**
 
 Run:
 
@@ -335,7 +335,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/auth/test_crede
 
 Expected: exit code `2`; collection fails because `atguigu_ai.auth.credentials` and the new public exports do not exist. Dependency import failure is not the intended RED.
 
-- [ ] **Step 5: Commit the dependency and credentials RED contract**
+- [x] **Step 5: Commit the dependency and credentials RED contract**
 
 Run:
 
@@ -354,7 +354,7 @@ Expected: both commands exit `0`; the commit contains only the dependency declar
 - Modify: `atguigu_ai/auth/__init__.py`
 - Test: `tests/unit/auth/test_credentials.py`
 
-- [ ] **Step 1: Create the complete email/password implementation**
+- [x] **Step 1: Create the complete email/password implementation**
 
 Create `atguigu_ai/auth/credentials.py` with this content:
 
@@ -527,7 +527,7 @@ class PasswordHasher:
             return False
 ```
 
-- [ ] **Step 2: Append the exact credential-core exports without changing existing exports**
+- [x] **Step 2: Append the exact credential-core exports without changing existing exports**
 
 Append these imports to `atguigu_ai/auth/__init__.py` after the Session import block:
 
@@ -555,7 +555,7 @@ Append these names to `__all__` after `SessionStoreUnavailable`:
     "normalize_email",
 ```
 
-- [ ] **Step 3: Run the focused GREEN tests**
+- [x] **Step 3: Run the focused GREEN tests**
 
 Run:
 
@@ -565,7 +565,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/auth/test_crede
 
 Expected: exit code `0`; all credentials tests pass. The real hash test prints no password or hash, and the overload test completes in under 5 seconds.
 
-- [ ] **Step 4: Run the existing auth and security regression set**
+- [x] **Step 4: Run the existing auth and security regression set**
 
 Run:
 
@@ -575,7 +575,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/auth tests/secu
 
 Expected: exit code `0`; all collected tests pass and the eleven pre-existing `atguigu_ai.auth` exports remain importable.
 
-- [ ] **Step 5: Commit credentials GREEN**
+- [x] **Step 5: Commit credentials GREEN**
 
 Run:
 
@@ -592,7 +592,7 @@ Expected: both commands exit `0`; the commit contains only the credentials imple
 **Files:**
 - Create: `tests/unit/auth/test_credential_tokens.py`
 
-- [ ] **Step 1: Define the recording Redis and fixed token helpers**
+- [x] **Step 1: Define the recording Redis and fixed token helpers**
 
 Create a `RecordingRedis` async fake that records every `eval(script, numkeys, *values)` call and consumes configured replies or raises a configured `redis.exceptions.RedisError`. Define:
 
@@ -615,7 +615,7 @@ def store(redis, replies=None, token_factory=lambda: TOKEN_A, clock=lambda: FIXE
 
 The fake must never interpret Lua. Unit assertions inspect arguments and stable result handling only; real atomic behavior belongs to Task 5.
 
-- [ ] **Step 2: Add the exact public and validation matrix**
+- [x] **Step 2: Add the exact public and validation matrix**
 
 Add parameterized tests for this matrix:
 
@@ -636,7 +636,7 @@ Add parameterized tests for this matrix:
 
 Assert every generated token matches `^[A-Za-z0-9_-]{43}$`, both token digests are passed so cross-purpose collisions can be checked, and the public export list preserves all existing model/Session names plus the eleven names fixed by the design.
 
-- [ ] **Step 3: Run the focused RED test**
+- [x] **Step 3: Run the focused RED test**
 
 Run:
 
@@ -646,7 +646,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/auth/test_crede
 
 Expected: collection fails only because `atguigu_ai.auth.credential_tokens` and its exports do not exist.
 
-- [ ] **Step 4: Commit token RED**
+- [x] **Step 4: Commit token RED**
 
 ```powershell
 git add tests/unit/auth/test_credential_tokens.py
@@ -660,7 +660,7 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "test: define
 - Create: `atguigu_ai/auth/credential_tokens.py`
 - Modify: `atguigu_ai/auth/__init__.py`
 
-- [ ] **Step 1: Add immutable public values and strict scalar validation**
+- [x] **Step 1: Add immutable public values and strict scalar validation**
 
 Implement the exact signatures from the approved design. Use a frozen `IssuedCredentialToken`, the two-value string enum, `_valid_account_id`, exact 43-character ASCII base64url `_valid_token`, SHA-256 `_digest`, bytes/string response normalization, four allocation attempts, and timezone-aware UTC clock normalization. Default both TTLs to 1800 seconds and require the TTL mapping to contain exactly both enum purposes.
 
@@ -677,7 +677,7 @@ def _current_key(purpose, account_id):
     return f"{_CURRENT_PREFIX}{purpose.value}:{account_id}"
 ```
 
-- [ ] **Step 2: Implement the issue Lua transaction**
+- [x] **Step 2: Implement the issue Lua transaction**
 
 The script receives three keys: candidate verify key, candidate reset key, and current account/purpose index. Arguments contain account ID, purpose-specific candidate key, digest, TTL, and the two token prefixes. It must execute this order atomically:
 
@@ -697,7 +697,7 @@ return 1
 
 Never delete a token owned by another account when a current index is corrupt. The script is standalone-Redis-only by design.
 
-- [ ] **Step 3: Implement the consume Lua transaction**
+- [x] **Step 3: Implement the consume Lua transaction**
 
 The script receives the directly addressed token key; arguments contain the current-index prefix, purpose, digest, and both validated prefixes. It must atomically implement:
 
@@ -716,7 +716,7 @@ on match: delete both keys; return account ID
 
 Map every redis-py `RedisError` and every impossible response shape to the stable store-unavailable exception. Do not catch programmer validation errors as dependency failures.
 
-- [ ] **Step 4: Append the seven token exports and run GREEN**
+- [x] **Step 4: Append the seven token exports and run GREEN**
 
 Preserve all existing exports and append `CredentialTokenPurpose`, `IssuedCredentialToken`, `CredentialTokenStoreUnavailable`, and `RedisCredentialTokenStore` (the other seven new credential names were added in Task 2).
 
@@ -729,7 +729,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/auth tests/secu
 
 Expected: both commands exit `0`; no existing export or security regression fails.
 
-- [ ] **Step 5: Commit token GREEN**
+- [x] **Step 5: Commit token GREEN**
 
 ```powershell
 git add atguigu_ai/auth/credential_tokens.py atguigu_ai/auth/__init__.py
@@ -745,7 +745,7 @@ git -c user.name=Codex -c user.email=codex@local.invalid commit -m "feat: add on
 - Create: `docs/reports/integration/2026-07-18-auth-credential-core.md`
 - Create: `docs/reports/integration/evidence/credential-core-*.txt`
 
-- [ ] **Step 1: Build the real Redis matrix on the owned harness**
+- [x] **Step 1: Build the real Redis matrix on the owned harness**
 
 Reuse the ownership-checked `llm-cs-redis` helpers from `test_redis_session.py`; do not duplicate destructive commands without the project/purpose label gate. Use DB 15, flush before/after every case, and cover:
 
@@ -765,13 +765,13 @@ Reuse the ownership-checked `llm-cs-redis` helpers from `test_redis_session.py`;
 | outage/recovery | sanitized exception; recreate same AOF volume; subsequent issue/consume works |
 | AOF recreation | unconsumed token survives owned-container recreation |
 
-- [ ] **Step 2: Add quantitative tests and bounds**
+- [x] **Step 2: Add quantitative tests and bounds**
 
 Add a `@pytest.mark.load` Argon2 test that first records ten sequential hashes and ten sequential verifies, then measures end-to-end await time from submission for 20 concurrent verifies shared across two `PasswordHasher` instances. Assert all succeed, event-loop heartbeat advances, no overload occurs at exactly 20 process-wide admissions, concurrent P95 is <=1.0 second, and the 21st request held behind 20 controlled jobs raises `PasswordHashingOverloaded`. Print sequential hash/verify P50/P95, concurrent P50/P95/wall time, and peak process working set; never print passwords or hashes.
 
 Add 300 sequential real-Redis issue/consume samples and report P50/P95/ops per second. Add replacement with 1000 stale tokens and assert the final issue operation remains <=250 ms. These are local acceptance numbers, not production capacity claims.
 
-- [ ] **Step 3: Run focused integration and independent QA**
+- [x] **Step 3: Run focused integration and independent QA**
 
 Run:
 
@@ -783,11 +783,11 @@ docker exec llm-cs-redis redis-cli -n 15 DBSIZE
 
 Expected: all tests pass, quantitative lines satisfy bounds, and DB size is `0`. Dispatch the dedicated QA Agent to rerun these commands, awkward Unicode/corruption cases, concurrency, resource/overload, secret exposure, monitoring boundary, and cleanup; retain its exact commands and measured results.
 
-- [ ] **Step 4: Update design documentation and write evidence**
+- [x] **Step 4: Update design documentation and write evidence**
 
 Update the Redis key block and credential sections in `docs/TECHNICAL_DESIGN.md` with the current-index key, one-current-token semantics, consume-first failure policy, bounded async Argon2, and the future account-row-lock orchestration contract. Write the report with links to UTF-8 evidence for unit, integration, load, regression, `pip check`, DB size, and independent QA. Record shared-environment conflicts separately from project failures.
 
-- [ ] **Step 5: Run the final repository gates**
+- [x] **Step 5: Run the final repository gates**
 
 ```powershell
 D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests -q
@@ -798,11 +798,11 @@ docker exec llm-cs-redis redis-cli -n 15 DBSIZE
 
 Expected: full suite and compile exit `0`, whitespace check is clean, DB size is `0`.
 
-- [ ] **Step 6: Stage and scan only planned artifacts**
+- [x] **Step 6: Stage and scan only planned artifacts**
 
 Reject `.env`, Redis persistence files, logs, caches, bytecode, credential-bearing URLs, private keys, raw passwords/tokens, and runtime secrets. Explicit test fixtures may be excluded only by exact path and must remain covered by repository security tests. Confirm every evidence `.txt` is UTF-8/ASCII text rather than PowerShell UTF-16.
 
-- [ ] **Step 7: Complete reviews and commit**
+- [x] **Step 7: Complete reviews and commit**
 
 Require specification approval, code-quality approval, and independent QA disposition with no open Critical/Important finding. Then commit:
 
