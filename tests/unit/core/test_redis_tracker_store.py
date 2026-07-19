@@ -93,3 +93,12 @@ async def test_redis_errors_are_sanitized() -> None:
 def test_ttl_must_be_positive_integer() -> None:
     with pytest.raises(ValueError):
         RedisTrackerStore(redis_client=RecordingRedis(), ttl_seconds=0)
+
+    with pytest.raises(ValueError):
+        RedisTrackerStore(redis_client=RecordingRedis(), ttl_seconds=True)
+
+
+@pytest.mark.parametrize("key_prefix", ["", "*", "tracker:*", "tracker:?", "tracker:["])
+def test_key_prefix_must_be_non_empty_literal(key_prefix: str) -> None:
+    with pytest.raises(ValueError):
+        RedisTrackerStore(redis_client=RecordingRedis(), key_prefix=key_prefix)

@@ -162,7 +162,7 @@ class TrackerStoreConfig:
     """Tracker存储配置
     
     属性：
-        type: 存储类型 (json/mysql/memory)
+        type: 存储类型 (json/mysql/redis/memory)
         path: JSON存储路径(仅json类型)
         url: 数据库连接URL(仅mysql类型)
         db: 数据库名称
@@ -170,6 +170,8 @@ class TrackerStoreConfig:
         port: 数据库端口
         username: 数据库用户名
         password: 数据库密码
+        key_prefix: Redis key 前缀
+        ttl_seconds: Redis 过期时间，None 表示不过期
     """
     type: str = TRACKER_STORE_JSON
     path: str = "trackers"
@@ -179,6 +181,8 @@ class TrackerStoreConfig:
     port: Optional[int] = None
     username: Optional[str] = None
     password: Optional[str] = None
+    key_prefix: str = "tracker:"
+    ttl_seconds: Optional[int] = None
     
     @classmethod
     def from_dict(cls, config: Dict[str, Any]) -> "TrackerStoreConfig":
@@ -194,6 +198,8 @@ class TrackerStoreConfig:
             port=config.get("port"),
             username=config.get("username"),
             password=config.get("password"),
+            key_prefix=config.get("key_prefix", "tracker:"),
+            ttl_seconds=config.get("ttl_seconds"),
         )
 
 

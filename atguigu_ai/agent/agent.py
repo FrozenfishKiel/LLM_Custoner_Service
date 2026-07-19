@@ -515,11 +515,29 @@ class Agent:
         
         # 从 endpoints.yml 获取 Tracker 存储配置
         tracker_store_config = endpoints_config.tracker_store
+        tracker_store_kwargs = {
+            "path": tracker_store_config.path,
+            "url": tracker_store_config.url,
+            "host": tracker_store_config.host,
+            "port": tracker_store_config.port,
+            "db": tracker_store_config.db,
+            "username": tracker_store_config.username,
+            "password": tracker_store_config.password,
+            "key_prefix": tracker_store_config.key_prefix,
+            "ttl_seconds": tracker_store_config.ttl_seconds,
+        }
+        tracker_store_kwargs = {
+            key: value
+            for key, value in tracker_store_kwargs.items()
+            if value is not None
+        }
+        if tracker_store_config.type.lower() == "redis":
+            tracker_store_kwargs.pop("path", None)
         tracker_store = create_tracker_store(
             tracker_store_config.type,
-            path=tracker_store_config.path,
+            **tracker_store_kwargs,
         )
-        logger.info(f"创建 TrackerStore: type={tracker_store_config.type}, path={tracker_store_config.path}")
+        logger.info(f"创建 TrackerStore: type={tracker_store_config.type}")
         
         # 创建策略
         from atguigu_ai.policies import EnterpriseSearchPolicyConfig

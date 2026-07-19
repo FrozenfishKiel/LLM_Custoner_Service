@@ -11,11 +11,13 @@ stores - Tracker存储系统
 from atguigu_ai.core.stores.tracker_store import TrackerStore
 from atguigu_ai.core.stores.json_store import JsonTrackerStore
 from atguigu_ai.core.stores.mysql_store import MySQLTrackerStore
+from atguigu_ai.core.stores.redis_store import RedisTrackerStore
 
 __all__ = [
     "TrackerStore",
     "JsonTrackerStore", 
     "MySQLTrackerStore",
+    "RedisTrackerStore",
     "create_tracker_store",
 ]
 
@@ -45,6 +47,8 @@ def create_tracker_store(
         return JsonTrackerStore(**kwargs)
     elif store_type == "mysql":
         return MySQLTrackerStore(**kwargs)
+    elif store_type == "redis":
+        return RedisTrackerStore(**kwargs)
     elif store_type == "memory":
         # 内存存储使用空的JSON存储实现
         return JsonTrackerStore(path=None, in_memory=True)

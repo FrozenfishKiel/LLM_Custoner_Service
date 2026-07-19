@@ -174,6 +174,9 @@ TRACKER_STORE_JSON: Final[str] = "json"
 TRACKER_STORE_MYSQL: Final[str] = "mysql"
 """MySQL存储类型"""
 
+TRACKER_STORE_REDIS: Final[str] = "redis"
+"""Redis存储类型"""
+
 TRACKER_STORE_MEMORY: Final[str] = "memory"
 """内存存储类型"""
 
