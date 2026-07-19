@@ -39,6 +39,16 @@ from atguigu_ai.shared.config import AtguiguConfig, LLMConfig
 
 logger = logging.getLogger(__name__)
 
+DEMO_IDENTITY_FLOW_IDS = frozenset({"switch_user_id"})
+
+
+def _filter_demo_identity_flows(flows: FlowsList, *, allow: bool) -> None:
+    """按生产安全边界过滤只供 demo 使用的身份切换 Flow。"""
+    if allow:
+        return
+    for flow_id in DEMO_IDENTITY_FLOW_IDS:
+        flows.remove_flow(flow_id)
+
 
 def _load_custom_actions(actions_path: Path) -> List[str]:
     """从用户工程的 actions 目录自动加载自定义 Action。
@@ -125,6 +135,8 @@ class AgentConfig:
     tracker_store_type: str = "memory"
     tracker_store_config: Dict[str, Any] = field(default_factory=dict)
     llm_config: Optional[LLMConfig] = None
+    runtime_mode: str = "production"
+    allow_demo_identity_flows: bool = False
 
 
 class Agent:
@@ -423,6 +435,10 @@ class Agent:
         if flows_path.exists():
             loader = FlowLoader()
             flows = loader.load(flows_path)
+            _filter_demo_identity_flows(
+                flows,
+                allow=config.allow_demo_identity_flows,
+            )
             logger.info(f"Loaded {len(flows)} flows from {flows_path}")
         
         # 加载用户自定义 Actions

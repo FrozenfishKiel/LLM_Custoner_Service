@@ -9,6 +9,36 @@ from atguigu_ai.agent.agent import Agent, AgentConfig
 from atguigu_ai.core.stores import RedisTrackerStore
 
 
+def test_agent_load_filters_switch_user_id_by_default(tmp_path: Path) -> None:
+    project = _write_minimal_project(
+        tmp_path,
+        endpoints_yml="tracker_store:\n  type: memory\n",
+        include_switch_user_id=True,
+    )
+
+    agent = Agent.load(project, config=AgentConfig())
+
+    assert "switch_user_id" not in agent.flows.flow_ids
+    assert "query_order_detail" in agent.flows.flow_ids
+
+
+def test_agent_load_can_keep_demo_identity_flow_when_explicitly_allowed(
+    tmp_path: Path,
+) -> None:
+    project = _write_minimal_project(
+        tmp_path,
+        endpoints_yml="tracker_store:\n  type: memory\n",
+        include_switch_user_id=True,
+    )
+
+    agent = Agent.load(
+        project,
+        config=AgentConfig(allow_demo_identity_flows=True),
+    )
+
+    assert "switch_user_id" in agent.flows.flow_ids
+
+
 def test_agent_load_passes_full_tracker_store_config(tmp_path: Path) -> None:
     project = _write_minimal_project(
         tmp_path,
@@ -54,15 +84,37 @@ tracker_store:
     assert agent.tracker_store.password == "test-password"
 
 
-def _write_minimal_project(tmp_path: Path, *, endpoints_yml: str) -> Path:
+def _write_minimal_project(
+    tmp_path: Path,
+    *,
+    endpoints_yml: str,
+    include_switch_user_id: bool = False,
+) -> Path:
     project = tmp_path / "project"
     project.mkdir()
     (project / "domain.yml").write_text("version: '3.1'\n", encoding="utf-8")
     (project / "data" / "flows").mkdir(parents=True)
-    (project / "data" / "flows" / "flow_order.yml").write_text(
+    switch_user_flow = (
         """
+  switch_user_id:
+    name: 切换账号
+    description: 切换账号、切换用户、更换用户ID
+    persisted_slots:
+      - user_id
+    steps:
+      - collect: user_id
+        description: 用户id
+        ask_before_filling: true
+        next: END
+"""
+        if include_switch_user_id
+        else ""
+    )
+    (project / "data" / "flows" / "flow_order.yml").write_text(
+        f"""
 version: "3.1"
 flows:
+{switch_user_flow}
   query_order_detail:
     name: 查询订单详情
     description: 查询订单详情
