@@ -45,7 +45,7 @@ Public service semantics:
 - Create: `atguigu_ai/email/__init__.py`
 - Create: `atguigu_ai/email/delivery.py`
 
-- [ ] **Step 1: Write the email delivery contract tests**
+- [x] **Step 1: Write the email delivery contract tests**
 
 Create `tests/unit/email/test_delivery.py` with tests for:
 
@@ -142,7 +142,7 @@ async def test_smtp_delivery_maps_dependency_errors_without_secret_text(monkeypa
     assert captured == {"host": "smtp.example.test", "port": 587, "timeout": 10}
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -152,7 +152,7 @@ D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/unit/email/test_deli
 
 Expected: collection fails because `atguigu_ai.email` does not exist.
 
-- [ ] **Step 3: Implement email delivery**
+- [x] **Step 3: Implement email delivery**
 
 Create `atguigu_ai/email/delivery.py` implementing:
 
@@ -176,7 +176,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
 Run:
 
