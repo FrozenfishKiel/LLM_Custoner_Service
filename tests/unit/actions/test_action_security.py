@@ -1,8 +1,26 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import Column, String, create_engine
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from ecs_demo.actions.security import ActionSecurityError, audit_metadata, current_action_user
+from ecs_demo.actions.security import (
+    ActionSecurityError,
+    audit_metadata,
+    current_action_user,
+    owned_order_query,
+)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Order(Base):
+    __tablename__ = "order_info"
+
+    order_id = Column(String(50), primary_key=True)
+    user_id = Column(String(50), nullable=False)
 
 
 class Tracker:
@@ -60,3 +78,35 @@ def test_audit_metadata_is_small_and_non_sensitive() -> None:
         "order_id": "order-1",
         "previous_status": "待发货",
     }
+
+
+def test_owned_order_query_requires_order_and_user_match() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    with factory() as session:
+        session.add_all(
+            [
+                Order(order_id="shared-order", user_id="user-a"),
+                Order(order_id="other-order", user_id="user-b"),
+            ]
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        owned = owned_order_query(
+            session,
+            Order,
+            user_id="user-a",
+            order_id="shared-order",
+        ).first()
+        crossed = owned_order_query(
+            session,
+            Order,
+            user_id="user-b",
+            order_id="shared-order",
+        ).first()
+
+    assert owned is not None
+    assert owned.user_id == "user-a"
+    assert crossed is None

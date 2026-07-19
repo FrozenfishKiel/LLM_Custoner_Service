@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from atguigu_ai.agent.actions import Action, ActionResult
+from .security import ActionSecurityError, current_action_user, owned_order_query
 
 logger = logging.getLogger(__name__)
 
@@ -184,12 +185,18 @@ class ActionGetOrderDetail(Action):
         domain: Optional[Any] = None,
         **kwargs: Any,
     ) -> ActionResult:
+        result = ActionResult()
+        try:
+            context = current_action_user(tracker, **kwargs)
+        except ActionSecurityError:
+            result.add_response("当前登录身份不可用，请重新登录后再试。")
+            return result
+
         from actions.db import SessionLocal
         from actions.db_table_class import OrderInfo, Postsale
         from sqlalchemy.orm import joinedload
         from sqlalchemy import and_, func
-        
-        result = ActionResult()
+
         order_id = tracker.get_slot("order_id")
         
         if not order_id or order_id == "false":
@@ -199,12 +206,16 @@ class ActionGetOrderDetail(Action):
         try:
             with SessionLocal() as session:
                 order_info = (
-                    session.query(OrderInfo)
+                    owned_order_query(
+                        session,
+                        OrderInfo,
+                        user_id=context.user_id,
+                        order_id=order_id,
+                    )
                     .options(joinedload(OrderInfo.order_detail))
                     .options(joinedload(OrderInfo.logistics))
                     .options(joinedload(OrderInfo.receive))
                     .options(joinedload(OrderInfo.order_status_))
-                    .filter_by(order_id=order_id)
                     .first()
                 )
                 
