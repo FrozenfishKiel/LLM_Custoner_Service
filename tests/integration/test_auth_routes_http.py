@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -56,6 +57,7 @@ EXTRA_TOKEN = "S" * 43
 SESSION_TOKEN_1 = "session-token-1"
 SESSION_TOKEN_2 = "session-token-2"
 SESSION_TOKEN_3 = "session-token-3"
+_TEST_DATABASE_PATTERN = re.compile(r"^llm_cs_test_[0-9a-f]{32}$")
 
 
 @dataclass
@@ -169,6 +171,14 @@ def _assert_no_temporary_mysql_databases() -> None:
     admin_engine = _admin_engine(build_database_url())
     try:
         with admin_engine.connect() as connection:
+            databases = [
+                row[0]
+                for row in connection.execute(text("SHOW DATABASES LIKE 'llm_cs_test_%'"))
+            ]
+            for database in databases:
+                if not _TEST_DATABASE_PATTERN.fullmatch(database):
+                    raise AssertionError(f"Unsafe temporary database name {database}")
+                connection.execute(text(f"DROP DATABASE IF EXISTS `{database}`"))
             databases = [
                 row[0]
                 for row in connection.execute(text("SHOW DATABASES LIKE 'llm_cs_test_%'"))
