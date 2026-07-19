@@ -140,7 +140,7 @@ Session由深模块 `RedisSessionStore` 管理，对外interface仅包含 `creat
 
 `AuthService` is the current service-layer orchestration boundary for registration, email verification, login, logout, forgot-password, resend-verification, reset-password, and change-password. Registration normalizes email, hashes the password, opens a MySQL unit of work, creates a pending consumer account, issues the Redis verification token, sends the verification email through the injected delivery adapter, and commits only after those steps succeed; duplicate email rolls back and maps to the stable duplicate-registration result. Email verification consumes the Redis token before durable mutation, then locks the account row, activates only a pending account, records audit, and commits. Login performs enumeration-safe password verification: missing, pending, disabled, malformed email, and wrong-password cases all map to one invalid-credentials result, while active accounts with a correct password receive a Redis Session. Forgot-password returns an accepted result for missing or inactive accounts and sends a reset email only for active accounts. Resend-verification returns the same accepted result for missing, active, or disabled accounts, and only sends a new verification email for pending accounts. Reset-password consumes the reset token first, locks the active account row, validates and hashes the new password, revokes all sessions while holding that lock, replaces the stored hash, records audit, and commits; consumed tokens are never restored after downstream failure. Change-password requires the current password, locks the active account row, hashes the new password, revokes all account sessions, records audit, and commits.
 
-`atguigu_ai.api.routes.auth` exposes this service through FastAPI routes, while `atguigu_ai.api.dependencies.AuthRouteDependencies` owns cookie names, cookie flags, CSRF validation, and session resolution. The HTTP layer remains a protocol adapter: it translates payloads, errors, cookies, and status codes, but does not reimplement password, token, Session, or account-row transaction rules. Browser pages, real SMTP environment wiring, rate limiting, demo-data initialization, account deletion, and chat authorization remain separate later slices.
+`atguigu_ai.api.routes.auth` exposes this service through FastAPI routes, while `atguigu_ai.api.dependencies.AuthRouteDependencies` owns cookie names, cookie flags, CSRF validation, and session resolution. The HTTP layer remains a protocol adapter: it translates payloads, errors, cookies, and status codes, but does not reimplement password, token, Session, or account-row transaction rules. Authenticated chat routes now reuse this same auth dependency seam before calling the Agent. Browser pages, real SMTP environment wiring, rate limiting, demo-data initialization, and account deletion remain separate later slices.
 
 ### 6.2 Email模块
 
@@ -198,7 +198,7 @@ role
 account_status
 ```
 
-FastAPI在调用Agent前解析身份，并将可信 `user_id` 写入受控metadata。Agent在创建或恢复Tracker时强制设置该 `user_id`，忽略模型或用户消息尝试修改身份的命令。
+FastAPI在调用Agent前解析身份，并将可信 `account_id`、`user_id`、`account_role` 和 `account_status` 写入受控metadata。Agent在创建或恢复Tracker时强制使用 `account:{account_id}` 作为Tracker键，忽略模型、用户消息或请求metadata尝试修改身份的命令。
 
 原有 `switch_user_id` Flow不得在生产用户域加载，只允许测试环境使用。
 
@@ -221,6 +221,13 @@ reset_conversation(identity) -> None
 6. Action再次校验订单归属。
 7. 记录Flow、Action、耗时、Token和结果。
 8. 返回结构化消息。
+
+当前生产认证入口由 `atguigu_ai.api.routes.chat` 提供：
+
+- `POST /api/chat/messages`：先校验 `auth_session`，再校验双提交CSRF，再解析账号到业务用户绑定，最后调用 `Agent.handle_message`。
+- `POST /api/chat/reset`：使用同一条可信身份链，只重置当前登录账号的 `account:{account_id}` Tracker。
+
+请求体中的 `sender`、`sender_id`、`session_id`、`account_id`、`user_id`、`role`、`account_status` 等身份字段一律不可信；路由会递归、大小写不敏感地清理metadata里的这些字段，并用服务端解析出的身份字段覆盖。缺失或无效Session返回401，CSRF不匹配返回403，待验证/禁用账号返回403，账号未绑定业务用户返回409，Session或绑定依赖不可用返回脱敏503。
 
 ### 6.6 Admin模块
 
@@ -418,7 +425,9 @@ POST   /api/chat/reset
 
 `GET /api/account/me` resolves the authenticated identity from the `auth_session` cookie and returns 401 for a missing or invalid session. `POST /api/auth/logout` revokes the current session when present, clears both cookies, and is idempotent. `POST /api/auth/change-password` requires a valid session and matching CSRF token, verifies the current password, changes the hash, revokes account sessions, and clears both cookies because the current session is invalidated.
 
-`DELETE /api/account/me`, browser pages, and chat authorization are not part of the current auth HTTP route slice and remain later work.
+`POST /api/chat/messages` and `POST /api/chat/reset` are mounted only when `create_app(auth_deps=..., chat_deps=...)` receives both dependency bundles. They require `auth_session` plus matching `auth_csrf` cookie and `X-CSRF-Token` header. The routes derive the Agent tracker and business metadata from the server-side account session and `account_user_binding`; client-supplied identity fields cannot choose another account or user. The legacy `/api/messages` route remains available for course/demo compatibility, but it is not a production-authenticated chat route.
+
+`DELETE /api/account/me` and browser pages remain later work.
 
 `/api/chat/messages`请求中不包含 `sender` 和 `user_id`：
 
