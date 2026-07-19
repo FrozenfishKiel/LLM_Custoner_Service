@@ -13,11 +13,13 @@ from typing import Any, Dict, List, Optional
 
 from atguigu_ai.agent.actions import Action, ActionResult
 from .security import (
+    ActionRateLimitError,
     ActionSecurityError,
     audit_metadata,
     current_action_user,
     owned_order_query,
     record_action_audit,
+    require_action_rate_limit,
 )
 
 logger = logging.getLogger(__name__)
@@ -581,6 +583,18 @@ class ActionAskSetReceiveInfo(Action):
             result.add_response("当前登录身份不可用，请重新登录后再试。")
             return result
 
+        set_receive_info = tracker.get_slot("set_receive_info")
+        if set_receive_info:
+            try:
+                await require_action_rate_limit(
+                    kwargs.get("rate_limiter"),
+                    account_id=context.account_id,
+                    action_name=self.name,
+                )
+            except ActionRateLimitError as exc:
+                result.add_response(str(exc))
+                return result
+
         from actions.db import SessionLocal
         from actions.db_table_class import OrderInfo, ReceiveInfo
         from uuid import uuid4
@@ -759,6 +773,20 @@ class ActionCancelOrder(Action):
             context = current_action_user(tracker, **kwargs)
         except ActionSecurityError:
             result.add_response("当前登录身份不可用，请重新登录后再试。")
+            return result
+
+        order_id = tracker.get_slot("order_id")
+        if not order_id:
+            result.add_response("订单信息丢失，请重新操作。")
+            return result
+        try:
+            await require_action_rate_limit(
+                kwargs.get("rate_limiter"),
+                account_id=context.account_id,
+                action_name=self.name,
+            )
+        except ActionRateLimitError as exc:
+            result.add_response(str(exc))
             return result
 
         from actions.db import SessionLocal

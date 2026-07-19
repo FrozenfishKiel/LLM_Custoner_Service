@@ -13,11 +13,13 @@ from uuid import uuid4
 
 from atguigu_ai.agent.actions import Action, ActionResult
 from .security import (
+    ActionRateLimitError,
     ActionSecurityError,
     audit_metadata,
     current_action_user,
     owned_order_query,
     record_action_audit,
+    require_action_rate_limit,
 )
 
 logger = logging.getLogger(__name__)
@@ -265,6 +267,22 @@ class ActionApplyPostsale(Action):
             context = current_action_user(tracker, **kwargs)
         except ActionSecurityError:
             result.add_response("当前登录身份不可用，请重新登录后再试。")
+            return result
+
+        order_id = tracker.get_slot("order_id")
+        postsale_type = tracker.get_slot("postsale_type")
+        postsale_reason = tracker.get_slot("postsale_reason")
+        if not all([order_id, postsale_type, postsale_reason]):
+            result.add_response("售后信息不完整，请重新申请。")
+            return result
+        try:
+            await require_action_rate_limit(
+                kwargs.get("rate_limiter"),
+                account_id=context.account_id,
+                action_name=self.name,
+            )
+        except ActionRateLimitError as exc:
+            result.add_response(str(exc))
             return result
 
         from actions.db import SessionLocal

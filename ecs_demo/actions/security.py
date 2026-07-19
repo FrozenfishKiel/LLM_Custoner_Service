@@ -3,10 +3,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import uuid4
 
+from atguigu_ai.rate_limit import RateLimitRule, RateLimitStoreUnavailable
+
 
 class ActionSecurityError(RuntimeError):
     def __init__(self, message: str = "Action identity is unavailable") -> None:
         super().__init__(message)
+
+
+class ActionRateLimitError(RuntimeError):
+    def __init__(self) -> None:
+        super().__init__("系统繁忙，请稍后重试")
+
+
+ACTION_MUTATION_RULE = RateLimitRule(
+    name="action.critical_mutation.account",
+    scope="action",
+    limit=10,
+    window_seconds=60,
+)
 
 
 @dataclass(frozen=True)
@@ -60,6 +75,22 @@ def owned_order_query(session, order_model, *, user_id: str, order_id: str):
         order_model.order_id == order_id,
         order_model.user_id == user_id,
     )
+
+
+async def require_action_rate_limit(
+    rate_limiter,
+    *,
+    account_id: str,
+    action_name: str,
+) -> None:
+    if rate_limiter is None:
+        return
+    try:
+        decision = await rate_limiter.check(ACTION_MUTATION_RULE, f"{account_id}:{action_name}")
+    except RateLimitStoreUnavailable:
+        raise ActionRateLimitError() from None
+    if not decision.allowed:
+        raise ActionRateLimitError()
 
 
 def audit_metadata(**values: object) -> dict[str, object]:
