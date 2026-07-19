@@ -138,6 +138,10 @@ resolve_session(session_id) -> AccountIdentity | None
 
 Session由深模块 `RedisSessionStore` 管理，对外interface仅包含 `create(identity)`、`resolve(token)`、`revoke(token)` 和 `revoke_all(account_id)`。模块生成至少256位随机token，只向浏览器返回原token；Redis key和日志只使用token的SHA-256摘要。Session模块不查询MySQL，调用者只能传入已经由服务端账号模块解析的 `AccountIdentity`。
 
+`AuthService` is the current service-layer orchestration boundary for registration, email verification, login, logout, forgot-password, and reset-password. Registration normalizes email, hashes the password, opens a MySQL unit of work, creates a pending consumer account, issues the Redis verification token, sends the verification email through the injected delivery adapter, and commits only after those steps succeed; duplicate email rolls back and maps to the stable duplicate-registration result. Email verification consumes the Redis token before durable mutation, then locks the account row, activates only a pending account, records audit, and commits. Login performs enumeration-safe password verification: missing, pending, disabled, malformed email, and wrong-password cases all map to one invalid-credentials result, while active accounts with a correct password receive a Redis Session. Forgot-password returns an accepted result for missing or inactive accounts and sends a reset email only for active accounts. Reset-password consumes the reset token first, locks the active account row, validates and hashes the new password, revokes all sessions while holding that lock, replaces the stored hash, records audit, and commits; consumed tokens are never restored after downstream failure.
+
+This service layer still has no HTTP routes, cookies, CSRF handling, browser pages, real SMTP environment wiring, rate limiting, demo-data initialization, account deletion, or chat authorization. Those remain separate slices that call the service instead of reimplementing password, token, Session, or account-row transaction rules.
+
 ### 6.2 Email模块
 
 新增 `atguigu_ai/email/`，通过单一接口发送验证和重置邮件：
