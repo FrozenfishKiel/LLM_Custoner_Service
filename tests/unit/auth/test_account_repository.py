@@ -313,4 +313,11 @@ def test_auth_exports_preserve_existing_names_and_append_repository_names():
         "AccountRepositoryUnavailable",
         "AccountRecord",
         "AccountRepository",
+        "InvalidCredentials",
+        "DuplicateRegistration",
+        "AuthServiceUnavailable",
+        "RegistrationAccepted",
+        "LoginAccepted",
+        "PasswordResetAccepted",
+        "AuthService",
     ]

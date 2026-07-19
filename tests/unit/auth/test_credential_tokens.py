@@ -112,6 +112,13 @@ def test_existing_credential_and_token_exports_are_exact():
         "AccountRepositoryUnavailable",
         "AccountRecord",
         "AccountRepository",
+        "InvalidCredentials",
+        "DuplicateRegistration",
+        "AuthServiceUnavailable",
+        "RegistrationAccepted",
+        "LoginAccepted",
+        "PasswordResetAccepted",
+        "AuthService",
     ]
     assert all(
         item is not None

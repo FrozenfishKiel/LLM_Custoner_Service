@@ -34,6 +34,15 @@ from .account_repository import (
     AccountRepositoryUnavailable,
     DuplicateAccountEmail,
 )
+from .service import (
+    AuthService,
+    AuthServiceUnavailable,
+    DuplicateRegistration,
+    InvalidCredentials,
+    LoginAccepted,
+    PasswordResetAccepted,
+    RegistrationAccepted,
+)
 
 __all__ = [
     "Account",
@@ -62,4 +71,11 @@ __all__ = [
     "AccountRepositoryUnavailable",
     "AccountRecord",
     "AccountRepository",
+    "InvalidCredentials",
+    "DuplicateRegistration",
+    "AuthServiceUnavailable",
+    "RegistrationAccepted",
+    "LoginAccepted",
+    "PasswordResetAccepted",
+    "AuthService",
 ]
