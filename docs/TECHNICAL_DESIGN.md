@@ -138,9 +138,9 @@ resolve_session(session_id) -> AccountIdentity | None
 
 Session由深模块 `RedisSessionStore` 管理，对外interface仅包含 `create(identity)`、`resolve(token)`、`revoke(token)` 和 `revoke_all(account_id)`。模块生成至少256位随机token，只向浏览器返回原token；Redis key和日志只使用token的SHA-256摘要。Session模块不查询MySQL，调用者只能传入已经由服务端账号模块解析的 `AccountIdentity`。
 
-`AuthService` is the current service-layer orchestration boundary for registration, email verification, login, logout, forgot-password, and reset-password. Registration normalizes email, hashes the password, opens a MySQL unit of work, creates a pending consumer account, issues the Redis verification token, sends the verification email through the injected delivery adapter, and commits only after those steps succeed; duplicate email rolls back and maps to the stable duplicate-registration result. Email verification consumes the Redis token before durable mutation, then locks the account row, activates only a pending account, records audit, and commits. Login performs enumeration-safe password verification: missing, pending, disabled, malformed email, and wrong-password cases all map to one invalid-credentials result, while active accounts with a correct password receive a Redis Session. Forgot-password returns an accepted result for missing or inactive accounts and sends a reset email only for active accounts. Reset-password consumes the reset token first, locks the active account row, validates and hashes the new password, revokes all sessions while holding that lock, replaces the stored hash, records audit, and commits; consumed tokens are never restored after downstream failure.
+`AuthService` is the current service-layer orchestration boundary for registration, email verification, login, logout, forgot-password, resend-verification, reset-password, and change-password. Registration normalizes email, hashes the password, opens a MySQL unit of work, creates a pending consumer account, issues the Redis verification token, sends the verification email through the injected delivery adapter, and commits only after those steps succeed; duplicate email rolls back and maps to the stable duplicate-registration result. Email verification consumes the Redis token before durable mutation, then locks the account row, activates only a pending account, records audit, and commits. Login performs enumeration-safe password verification: missing, pending, disabled, malformed email, and wrong-password cases all map to one invalid-credentials result, while active accounts with a correct password receive a Redis Session. Forgot-password returns an accepted result for missing or inactive accounts and sends a reset email only for active accounts. Resend-verification returns the same accepted result for missing, active, or disabled accounts, and only sends a new verification email for pending accounts. Reset-password consumes the reset token first, locks the active account row, validates and hashes the new password, revokes all sessions while holding that lock, replaces the stored hash, records audit, and commits; consumed tokens are never restored after downstream failure. Change-password requires the current password, locks the active account row, hashes the new password, revokes all account sessions, records audit, and commits.
 
-This service layer still has no HTTP routes, cookies, CSRF handling, browser pages, real SMTP environment wiring, rate limiting, demo-data initialization, account deletion, or chat authorization. Those remain separate slices that call the service instead of reimplementing password, token, Session, or account-row transaction rules.
+`atguigu_ai.api.routes.auth` exposes this service through FastAPI routes, while `atguigu_ai.api.dependencies.AuthRouteDependencies` owns cookie names, cookie flags, CSRF validation, and session resolution. The HTTP layer remains a protocol adapter: it translates payloads, errors, cookies, and status codes, but does not reimplement password, token, Session, or account-row transaction rules. Browser pages, real SMTP environment wiring, rate limiting, demo-data initialization, account deletion, and chat authorization remain separate later slices.
 
 ### 6.2 Email模块
 
@@ -399,16 +399,26 @@ POST /api/auth/forgot-password
 POST /api/auth/reset-password
 ```
 
+These routes are mounted only when `create_app(auth_deps=...)` receives an `AuthRouteDependencies` bundle. `POST /api/auth/login` returns the signed-in identity and sets two cookies:
+
+- `auth_session`: HttpOnly, Secure in HTTPS mode, SameSite=Lax.
+- `auth_csrf`: readable by browser JavaScript, Secure in HTTPS mode, SameSite=Lax.
+
+All state-changing authenticated routes use a double-submit CSRF rule: the `auth_csrf` cookie must exactly match the `X-CSRF-Token` header. Missing or invalid CSRF returns 403 before service mutation.
+
 ### 9.2 登录用户接口
 
 ```text
 POST   /api/auth/logout
 POST   /api/auth/change-password
 GET    /api/account/me
-DELETE /api/account/me
 POST   /api/chat/messages
 POST   /api/chat/reset
 ```
+
+`GET /api/account/me` resolves the authenticated identity from the `auth_session` cookie and returns 401 for a missing or invalid session. `POST /api/auth/logout` revokes the current session when present, clears both cookies, and is idempotent. `POST /api/auth/change-password` requires a valid session and matching CSRF token, verifies the current password, changes the hash, revokes account sessions, and clears both cookies because the current session is invalidated.
+
+`DELETE /api/account/me`, browser pages, and chat authorization are not part of the current auth HTTP route slice and remain later work.
 
 `/api/chat/messages`请求中不包含 `sender` 和 `user_id`：
 
