@@ -28,6 +28,12 @@ from .credential_tokens import (
     IssuedCredentialToken,
     RedisCredentialTokenStore,
 )
+from .account_repository import (
+    AccountRecord,
+    AccountRepository,
+    AccountRepositoryUnavailable,
+    DuplicateAccountEmail,
+)
 
 __all__ = [
     "Account",
@@ -52,4 +58,8 @@ __all__ = [
     "IssuedCredentialToken",
     "CredentialTokenStoreUnavailable",
     "RedisCredentialTokenStore",
+    "DuplicateAccountEmail",
+    "AccountRepositoryUnavailable",
+    "AccountRecord",
+    "AccountRepository",
 ]

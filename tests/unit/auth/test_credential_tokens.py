@@ -11,6 +11,9 @@ import atguigu_ai.auth as auth_module
 from atguigu_ai.auth import (
     Account,
     AccountIdentity,
+    AccountRecord,
+    AccountRepository,
+    AccountRepositoryUnavailable,
     AccountRole,
     AccountStatus,
     AccountUserBinding,
@@ -20,6 +23,7 @@ from atguigu_ai.auth import (
     CreatedSession,
     CredentialTokenPurpose,
     CredentialTokenStoreUnavailable,
+    DuplicateAccountEmail,
     EmailAddress,
     InvalidEmail,
     InvalidPassword,
@@ -104,6 +108,10 @@ def test_existing_credential_and_token_exports_are_exact():
         "IssuedCredentialToken",
         "CredentialTokenStoreUnavailable",
         "RedisCredentialTokenStore",
+        "DuplicateAccountEmail",
+        "AccountRepositoryUnavailable",
+        "AccountRecord",
+        "AccountRepository",
     ]
     assert all(
         item is not None
@@ -111,6 +119,10 @@ def test_existing_credential_and_token_exports_are_exact():
             Account,
             AccountRole,
             AccountStatus,
+            DuplicateAccountEmail,
+            AccountRepositoryUnavailable,
+            AccountRecord,
+            AccountRepository,
             AccountUserBinding,
             AuditEvent,
             AuditResult,
