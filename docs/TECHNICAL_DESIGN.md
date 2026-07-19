@@ -334,10 +334,12 @@ rate:login:{ip}:{email_hash}              -> 登录计数
 rate:register:{ip}                        -> 注册计数
 rate:email:{account_id}:{purpose}         -> 邮件发送计数
 rate:chat:{account_id}                    -> 客服调用计数
-tracker:{account_id}                      -> 序列化DialogueStateTracker
+tracker:account:{account_id}              -> 序列化DialogueStateTracker
 ```
 
 Redis启用AOF持久化。Session、验证码和限流数据允许按TTL自然过期；订单事实不得只存在Redis。
+
+`atguigu_ai.core.stores.RedisTrackerStore` 已实现 Redis 版 TrackerStore。生产 chat 路由传入 Agent 的 sender_id 为 `account:{account_id}`，因此 Redis 中实际 tracker key 为 `tracker:account:{account_id}`。该 Store 使用 JSON 保存 `DialogueStateTracker.to_dict()`，支持保存、恢复、删除和按前缀列出 tracker；Redis 连接、超时、协议错误统一映射为脱敏的 `TrackerStoreException`，不得暴露 Redis URL、密码或原始 tracker 内容。`key_prefix` 必须是非空字面前缀，不能包含 Redis glob 字符；`ttl_seconds` 为空表示不设置过期时间，提供时必须是正整数。
 
 Session的创建、解析、单个撤销和账号全量撤销使用短Lua脚本原子执行。账号generation使用不保存映射的128位随机值：首次创建Session时若generation不存在则原子初始化；`revoke_all`以新随机值覆盖generation并删除账号Session索引，执行时间不随Session数量增长。旧Session键等待TTL回收，但因generation不匹配立即失效；generation缺失时 `resolve` 必须fail closed并删除当前Session，绝不能回退为固定初始值。`resolve`在同一脚本中比较generation，只在剩余TTL低于配置阈值时滑动续期。该设计保证并发 `create/revoke_all` 和 `resolve/revoke_all` 存在明确线性化顺序，不使用分布式锁。
 
@@ -497,14 +499,17 @@ GET /internal/metrics
 
 ### 11.2 必须修改
 
-- TrackerStore新增Redis Adapter。
 - Agent接收服务端可信业务身份。
-- 生产配置不加载 `switch_user_id` Flow。
 - Action查询和写入增加用户归属条件。
 - Action写操作增加幂等和完整事务。
 - EnterpriseSearchPolicy的非业务回复限定为电商客服身份。
 - LLM、数据库和Neo4j异常转换为稳定错误类型。
 - 日志不记录完整消息中的敏感数据。
+
+### 11.2.1 已完成的安全改造
+
+- TrackerStore 已新增 Redis Adapter。
+- 生产 Agent 默认不加载 `switch_user_id` Flow；课程 demo 或测试需要时必须显式设置 `allow_demo_identity_flows=True`。
 
 ### 11.3 禁止改造
 
