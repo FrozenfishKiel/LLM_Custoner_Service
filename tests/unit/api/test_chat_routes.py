@@ -1,0 +1,298 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from types import SimpleNamespace
+
+from fastapi.testclient import TestClient
+
+from atguigu_ai.api.dependencies import AuthRouteDependencies
+from atguigu_ai.api.routes.chat import ChatRouteDependencies, create_chat_router
+from atguigu_ai.api.server import create_app
+from atguigu_ai.auth import AccountIdentity, AccountRole, AccountStatus, AuthService
+from atguigu_ai.auth.business_identity import (
+    BusinessUserBindingUnavailable,
+    BusinessUserIdentity,
+    BusinessUserNotBound,
+)
+
+
+class FakeAuthService:
+    pass
+
+
+class FakeSessions:
+    def __init__(self) -> None:
+        self.identity: AccountIdentity | None = AccountIdentity(
+            "account-1", AccountRole.consumer, AccountStatus.active
+        )
+        self.error: Exception | None = None
+
+    async def resolve(self, token: str) -> AccountIdentity | None:
+        if self.error is not None:
+            raise self.error
+        return self.identity if token == "session-token" else None
+
+
+class FakeBusinessIdentityResolver:
+    def __init__(self) -> None:
+        self.identity = BusinessUserIdentity(
+            account_id="account-1",
+            user_id="business-user-1",
+            role=AccountRole.consumer,
+            account_status=AccountStatus.active,
+        )
+        self.error: Exception | None = None
+        self.calls: list[AccountIdentity] = []
+
+    async def resolve(self, identity: AccountIdentity) -> BusinessUserIdentity:
+        self.calls.append(identity)
+        if self.error is not None:
+            raise self.error
+        return self.identity
+
+
+class FakeAgent:
+    def __init__(self) -> None:
+        self.messages: list[tuple[str, str, dict[str, object]]] = []
+        self.reset_calls: list[str] = []
+
+    async def handle_message(
+        self, message: str, sender_id: str, metadata: dict[str, object]
+    ) -> SimpleNamespace:
+        self.messages.append((message, sender_id, metadata))
+        return SimpleNamespace(messages=[{"text": "received"}])
+
+    async def reset_tracker(self, sender_id: str) -> None:
+        self.reset_calls.append(sender_id)
+
+
+def build_client() -> tuple[TestClient, FakeAgent, FakeSessions, FakeBusinessIdentityResolver]:
+    sessions = FakeSessions()
+    resolver = FakeBusinessIdentityResolver()
+    agent = FakeAgent()
+    auth_deps = AuthRouteDependencies(service=FakeAuthService(), sessions=sessions)
+    app = create_app(auth_deps=auth_deps, enable_inspect=False)
+    app.include_router(create_chat_router(ChatRouteDependencies(agent, resolver)))
+    return TestClient(app, base_url="https://testserver"), agent, sessions, resolver
+
+
+def authenticated_request(client: TestClient, path: str, payload: dict[str, object] | None = None):
+    return client.post(
+        path,
+        cookies={"auth_session": "session-token", "auth_csrf": "csrf-token"},
+        headers={"X-CSRF-Token": "csrf-token"},
+        json=payload,
+    )
+
+
+def test_chat_message_requires_missing_or_invalid_session() -> None:
+    client, agent, _, _ = build_client()
+
+    missing = client.post(
+        "/api/chat/messages",
+        cookies={"auth_csrf": "csrf-token"},
+        headers={"X-CSRF-Token": "csrf-token"},
+        json={"message": "hello"},
+    )
+    invalid = client.post(
+        "/api/chat/messages",
+        cookies={"auth_session": "invalid-session", "auth_csrf": "csrf-token"},
+        headers={"X-CSRF-Token": "csrf-token"},
+        json={"message": "hello"},
+    )
+
+    assert missing.status_code == 401
+    assert invalid.status_code == 401
+    assert agent.messages == []
+
+
+def test_chat_message_requires_csrf() -> None:
+    client, agent, _, _ = build_client()
+
+    response = client.post(
+        "/api/chat/messages",
+        cookies={"auth_session": "session-token", "auth_csrf": "csrf-token"},
+        json={"message": "hello"},
+    )
+    mismatch = client.post(
+        "/api/chat/messages",
+        cookies={"auth_session": "session-token", "auth_csrf": "csrf-token"},
+        headers={"X-CSRF-Token": "other-token"},
+        json={"message": "hello"},
+    )
+
+    assert response.status_code == 403
+    assert mismatch.status_code == 403
+    assert agent.messages == []
+
+
+def test_chat_message_uses_server_tracker_and_trusted_metadata() -> None:
+    client, agent, _, _ = build_client()
+
+    response = authenticated_request(client, "/api/chat/messages", {"message": "hello"})
+
+    assert response.status_code == 200
+    assert response.json() == [{"recipient_id": "account:account-1", "text": "received", "buttons": None, "image": None, "custom": None}]
+    assert agent.messages == [
+        (
+            "hello",
+            "account:account-1",
+            {
+                "account_id": "account-1",
+                "user_id": "business-user-1",
+                "account_role": "consumer",
+                "account_status": "active",
+            },
+        )
+    ]
+
+
+def test_chat_message_ignores_or_rejects_client_identity_fields() -> None:
+    client, agent, _, _ = build_client()
+    forged = {
+        "message": "hello",
+        "sender": "attacker",
+        "sender_id": "attacker",
+        "session_id": "attacker-session",
+        "account_id": "attacker-account",
+        "user_id": "attacker-user",
+        "role": "admin",
+        "account_status": "disabled",
+        "metadata": {"account_id": "attacker-account"},
+    }
+
+    response = authenticated_request(client, "/api/chat/messages", forged)
+
+    assert response.status_code in {200, 422}
+    if response.status_code == 200:
+        _, sender_id, metadata = agent.messages[-1]
+        assert sender_id == "account:account-1"
+        assert metadata == {
+            "account_id": "account-1",
+            "user_id": "business-user-1",
+            "account_role": "consumer",
+            "account_status": "active",
+        }
+    else:
+        assert agent.messages == []
+
+
+def test_chat_message_returns_409_when_account_has_no_business_binding() -> None:
+    client, agent, _, resolver = build_client()
+    resolver.error = BusinessUserNotBound()
+
+    response = authenticated_request(client, "/api/chat/messages", {"message": "hello"})
+
+    assert response.status_code == 409
+    assert agent.messages == []
+
+
+def test_chat_reset_returns_409_when_account_has_no_business_binding() -> None:
+    client, agent, _, resolver = build_client()
+    resolver.error = BusinessUserNotBound()
+
+    response = authenticated_request(client, "/api/chat/reset")
+
+    assert response.status_code == 409
+    assert agent.reset_calls == []
+
+
+def test_chat_message_returns_403_for_pending_or_disabled_account() -> None:
+    for status in (AccountStatus.pending, AccountStatus.disabled):
+        client, agent, sessions, resolver = build_client()
+        sessions.identity = AccountIdentity("account-1", AccountRole.consumer, status)
+
+        response = authenticated_request(client, "/api/chat/messages", {"message": "hello"})
+
+        assert response.status_code == 403
+        assert agent.messages == []
+        assert resolver.calls == []
+
+
+def test_chat_reset_requires_csrf_and_resets_only_authenticated_tracker() -> None:
+    client, agent, _, _ = build_client()
+
+    forbidden = client.post(
+        "/api/chat/reset",
+        cookies={"auth_session": "session-token", "auth_csrf": "csrf-token"},
+    )
+    mismatch = client.post(
+        "/api/chat/reset",
+        cookies={"auth_session": "session-token", "auth_csrf": "csrf-token"},
+        headers={"X-CSRF-Token": "other-token"},
+    )
+    response = authenticated_request(
+        client,
+        "/api/chat/reset",
+        {"session_id": "attacker-session", "account_id": "attacker-account"},
+    )
+
+    assert forbidden.status_code == 403
+    assert mismatch.status_code == 403
+    assert response.status_code == 204
+    assert agent.reset_calls == ["account:account-1"]
+
+
+def test_chat_reset_requires_missing_or_invalid_session() -> None:
+    client, agent, _, _ = build_client()
+
+    missing = client.post(
+        "/api/chat/reset",
+        cookies={"auth_csrf": "csrf-token"},
+        headers={"X-CSRF-Token": "csrf-token"},
+    )
+    invalid = client.post(
+        "/api/chat/reset",
+        cookies={"auth_session": "invalid-session", "auth_csrf": "csrf-token"},
+        headers={"X-CSRF-Token": "csrf-token"},
+    )
+
+    assert missing.status_code == 401
+    assert invalid.status_code == 401
+    assert agent.reset_calls == []
+
+
+def test_chat_reset_returns_403_for_pending_or_disabled_account() -> None:
+    for status in (AccountStatus.pending, AccountStatus.disabled):
+        client, agent, sessions, resolver = build_client()
+        sessions.identity = AccountIdentity("account-1", AccountRole.consumer, status)
+
+        response = authenticated_request(client, "/api/chat/reset")
+
+        assert response.status_code == 403
+        assert agent.reset_calls == []
+        assert resolver.calls == []
+
+
+def test_session_dependency_outage_returns_sanitized_503() -> None:
+    client, agent, sessions, _ = build_client()
+    sessions.error = RuntimeError("redis://customer:secret@cache/internal")
+
+    response = authenticated_request(client, "/api/chat/messages", {"message": "hello"})
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Authentication service is unavailable"}
+    assert "secret" not in response.text
+    assert agent.messages == []
+
+
+def test_binding_dependency_outage_returns_sanitized_503() -> None:
+    client, agent, _, resolver = build_client()
+    resolver.error = BusinessUserBindingUnavailable()
+
+    response = authenticated_request(client, "/api/chat/messages", {"message": "hello"})
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Chat authorization service is unavailable"}
+    assert agent.messages == []
+
+
+def test_reset_binding_dependency_outage_returns_sanitized_503() -> None:
+    client, agent, _, resolver = build_client()
+    resolver.error = BusinessUserBindingUnavailable()
+
+    response = authenticated_request(client, "/api/chat/reset")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Chat authorization service is unavailable"}
+    assert agent.reset_calls == []
