@@ -383,12 +383,17 @@ class EnterpriseSearchPolicy(Policy):
         tracker.record_pattern("cannot_handle")
         
         # 尝试从domain获取默认回复
-        fallback_text = "抱歉，我没有理解您的意思。请换一种方式表达。"
+        fallback_text = "抱歉，我只能处理订单、物流和售后相关问题。请告诉我您要查询订单、查看物流，还是办理售后。"
         if domain:
-            responses = domain.get_response("utter_default")
+            responses = domain.get_response("utter_cannot_handle")
             if responses:
-                import random
-                fallback_text = random.choice(responses).text
+                scoped_responses = [
+                    response.text
+                    for response in responses
+                    if all(token in response.text for token in ("订单", "物流", "售后"))
+                ]
+                if scoped_responses:
+                    fallback_text = scoped_responses[0]
         
         return PolicyPrediction(
             action="action_send_text",

@@ -59,33 +59,42 @@ flows:
         ask_before_filling: true  # 清空槽位重新填充
         next:
           - if: slots.modify_content == "收货人姓名"  # 如果receive_content=收货人姓名，收集收货人姓名
-            then:
-              - collect: receiver_name  # 收集收货人姓名，自动调用 utter_ask_receiver_name
-                description: 姓名
-                ask_before_filling: true  # 清空槽位重新填充
-                next: if_modify_continue  # 跳转到id为if_modify_continue的步骤，询问是否继续修改其他内容
+            then: collect_receiver_name
           - if: slots.modify_content == "收货人电话"  # 如果receive_content=收货人电话，收集收货人电话
-            then:
-              - collect: receiver_phone  # 收集收货人电话，自动调用 utter_ask_receiver_phone
-                description: 手机号码
-                ask_before_filling: true  # 清空槽位重新填充
-                next: if_modify_continue  # 跳转到id为if_modify_continue的步骤，询问是否继续修改其他内容
+            then: collect_receiver_phone
           - if: slots.modify_content == "收货地址"  # 如果receive_content=收货地址，收集收货地址
-            then:
-              - collect: receive_province  # 收集收货地址的省份，自动调用 action_ask_receive_province，action而不是utter因为要查表
-                ask_before_filling: true  # 清空槽位重新填充
-              - collect: receive_city  # 收集收货地址的城市，自动调用 action_ask_receive_city，action而不是utter因为要查表
-                ask_before_filling: true  # 清空槽位重新填充
-              - collect: receive_district  # 收集收货地址的区县，自动调用 action_ask_receive_district，action而不是utter因为要查表
-                ask_before_filling: true  # 清空槽位重新填充
-              - collect: receive_street_address  # 收集收货地址的街道地址，自动调用 utter_ask_receive_street_address，需要询问，让用户输入
-                description: 街道地址
-                ask_before_filling: true  # 清空槽位重新填充
-                next: if_modify_continue  # 收集完收货地址后，跳转到id为if_modify_continue的步骤，询问是否继续修改其他内容
+            then: collect_receive_province
           # 如果之前已经修改过内容，但是再次修改其他内容时选择了取消
           - if: slots.receive_id == "modified"
             then: confirm_receive_info
           - else: END
+      - id: collect_receiver_name
+        collect: receiver_name  # 收集收货人姓名，自动调用 utter_ask_receiver_name
+        description: 姓名
+        ask_before_filling: true  # 清空槽位重新填充
+        next: if_modify_continue  # 跳转到id为if_modify_continue的步骤，询问是否继续修改其他内容
+      - id: collect_receiver_phone
+        collect: receiver_phone  # 收集收货人电话，自动调用 utter_ask_receiver_phone
+        description: 手机号码
+        ask_before_filling: true  # 清空槽位重新填充
+        next: if_modify_continue  # 跳转到id为if_modify_continue的步骤，询问是否继续修改其他内容
+      - id: collect_receive_province
+        collect: receive_province  # 收集收货地址的省份，自动调用 action_ask_receive_province，action而不是utter因为要查表
+        ask_before_filling: true  # 清空槽位重新填充
+        next: collect_receive_city
+      - id: collect_receive_city
+        collect: receive_city  # 收集收货地址的城市，自动调用 action_ask_receive_city，action而不是utter因为要查表
+        ask_before_filling: true  # 清空槽位重新填充
+        next: collect_receive_district
+      - id: collect_receive_district
+        collect: receive_district  # 收集收货地址的区县，自动调用 action_ask_receive_district，action而不是utter因为要查表
+        ask_before_filling: true  # 清空槽位重新填充
+        next: collect_receive_street_address
+      - id: collect_receive_street_address
+        collect: receive_street_address  # 收集收货地址的街道地址，自动调用 utter_ask_receive_street_address，需要询问，让用户输入
+        description: 街道地址
+        ask_before_filling: true  # 清空槽位重新填充
+        next: if_modify_continue  # 收集完收货地址后，跳转到id为if_modify_continue的步骤，询问是否继续修改其他内容
       - id: if_modify_continue  # 询问是否继续修改
         collect: if_modify_continue  # 收集是否继续修改内容，自动调用 utter_ask_if_modify_continue，button显示是/否
         ask_before_filling: true  # 清空槽位重新填充

@@ -360,7 +360,7 @@ class ActionApplyPostsale(Action):
                     session.commit()
                     type_text = {"退款": "退款", "退货": "退货退款", "换货": "换货"}.get(postsale_type, "售后")
                     result.add_response(
-                        f"您的{type_text}申请已提交！\n\n"
+                        f"您的{type_text}申请已成功提交！\n\n"
                         f"- 订单号: {order_id}\n"
                         f"- 申请类型: {postsale_type}\n"
                         f"- 申请原因: {postsale_reason}\n\n"
@@ -414,7 +414,7 @@ class ActionApplyPostsale(Action):
             
             type_text = {"退款": "退款", "退货": "退货退款", "换货": "换货"}.get(postsale_type, "售后")
             result.add_response(
-                f"您的{type_text}申请已提交！\n\n"
+                f"您的{type_text}申请已成功提交！\n\n"
                 f"- 订单号: {order_id}\n"
                 f"- 申请类型: {postsale_type}\n"
                 f"- 申请原因: {postsale_reason}\n\n"

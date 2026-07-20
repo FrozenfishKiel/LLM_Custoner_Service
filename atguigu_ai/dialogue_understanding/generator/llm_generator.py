@@ -8,6 +8,7 @@ LLM命令生成器
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
@@ -26,6 +27,8 @@ from atguigu_ai.dialogue_understanding.commands.error_commands import (
     ErrorCommand,
     InternalErrorCommand,
 )
+from atguigu_ai.dialogue_understanding.commands.flow_commands import StartFlowCommand
+from atguigu_ai.dialogue_understanding.commands.slot_commands import SetSlotCommand
 from atguigu_ai.shared.llm import create_llm_client
 from atguigu_ai.shared.llm.base_client import LLMClient, LLMResponse
 from atguigu_ai.shared.exceptions import LLMException
@@ -145,6 +148,13 @@ class LLMCommandGenerator(CommandGenerator):
             logger.warning("No user message to process")
             result.commands = [CannotHandleCommand(reason="no_user_message")]
             return result
+
+        if _is_obvious_out_of_customer_service_scope(tracker.latest_message.text):
+            result.commands = [
+                CannotHandleCommand(reason="out_of_customer_service_scope")
+            ]
+            result.metadata["boundary_guard"] = "out_of_customer_service_scope"
+            return result
         
         try:
             # 1. 构建Prompt
@@ -172,6 +182,7 @@ class LLMCommandGenerator(CommandGenerator):
             # 3. 解析命令
             parse_result = self.command_parser.parse(llm_response.content)
             result.commands = parse_result.commands
+            self._preserve_order_id_from_user_message(tracker, result.commands)
             
             if parse_result.errors:
                 result.metadata["parse_errors"] = parse_result.errors
@@ -199,6 +210,31 @@ class LLMCommandGenerator(CommandGenerator):
             result.metadata["error"] = str(e)
         
         return result
+
+    def _preserve_order_id_from_user_message(
+        self,
+        tracker: "DialogueStateTracker",
+        commands: List["Command"],
+    ) -> None:
+        if not commands:
+            return
+        if not any(isinstance(command, StartFlowCommand) for command in commands):
+            return
+        if any(
+            isinstance(command, SetSlotCommand) and command.name == "order_id"
+            for command in commands
+        ):
+            return
+
+        order_id = _extract_order_id(tracker.latest_message.text)
+        if order_id:
+            commands.append(
+                SetSlotCommand(
+                    name="order_id",
+                    value=order_id,
+                    extractor="user_message",
+                )
+            )
     
     def _format_messages_for_log(self, messages: List[Dict[str, str]]) -> str:
         """格式化消息用于日志。"""
@@ -234,6 +270,52 @@ class LLMCommandGenerator(CommandGenerator):
             include_flows=config.get("include_flows", True),
         )
         return cls(config=generator_config)
+
+
+def _is_obvious_out_of_customer_service_scope(message: str) -> bool:
+    normalized = message.strip().lower()
+    if not normalized:
+        return False
+    customer_service_terms = (
+        "订单",
+        "物流",
+        "快递",
+        "售后",
+        "退货",
+        "退款",
+        "换货",
+        "收货",
+        "发货",
+    )
+    if any(term in normalized for term in customer_service_terms):
+        return False
+    out_of_scope_terms = (
+        "天气",
+        "气温",
+        "下雨",
+        "晴",
+        "python",
+        "代码",
+        "编程",
+        "快排",
+        "quicksort",
+        "比特币",
+        "股票",
+        "投资",
+        "走势",
+        "价格预测",
+        "笑话",
+        "讲个笑话",
+        "你是谁",
+    )
+    return any(term in normalized for term in out_of_scope_terms)
+
+
+def _extract_order_id(message: str) -> Optional[str]:
+    match = re.search(r"\b([A-Za-z0-9]+(?:-[A-Za-z0-9]+)+)\b", message)
+    if not match:
+        return None
+    return match.group(1)
 
 
 # 导出

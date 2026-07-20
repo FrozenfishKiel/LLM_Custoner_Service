@@ -13,6 +13,7 @@ import importlib.util
 import inspect
 import logging
 import sys
+import types
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -66,6 +67,18 @@ def _load_custom_actions(actions_path: Path) -> List[str]:
         return []
     
     registered_actions = []
+    package_name = actions_path.name
+    package_module = sys.modules.get(package_name)
+    if package_module is None:
+        package_module = types.ModuleType(package_name)
+        package_module.__path__ = [str(actions_path)]  # type: ignore[attr-defined]
+        package_module.__file__ = str(actions_path / "__init__.py")
+        sys.modules[package_name] = package_module
+    else:
+        package_paths = list(getattr(package_module, "__path__", []))
+        if str(actions_path) not in package_paths:
+            package_paths.insert(0, str(actions_path))
+            package_module.__path__ = package_paths  # type: ignore[attr-defined]
     
     # 将 actions 目录的父目录添加到 sys.path，以便正确导入
     parent_path = str(actions_path.parent)
@@ -77,8 +90,10 @@ def _load_custom_actions(actions_path: Path) -> List[str]:
         for py_file in actions_path.glob("*.py"):
             if py_file.name.startswith("_"):
                 continue  # 跳过 __init__.py 等
+            if not py_file.stem.startswith("action_"):
+                continue  # 跳过 db.py、security.py 等支持模块，避免覆盖测试/运行期注入
             
-            module_name = f"actions.{py_file.stem}"
+            module_name = f"{package_name}.{py_file.stem}"
             
             try:
                 # 动态导入模块

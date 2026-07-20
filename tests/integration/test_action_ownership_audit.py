@@ -264,7 +264,8 @@ async def test_cancel_order_is_owned_idempotent_and_audited(action_db_fixture) -
     )
 
     assert first.responses[0]["text"].startswith("订单已取消")
-    assert second.responses[0]["text"] == "订单已取消"
+    assert "成功" in first.responses[0]["text"]
+    assert second.responses[0]["text"] == "订单已取消成功"
     assert crossed.responses[0]["text"] == "未找到该订单，请检查订单号是否正确。"
 
     with Session(action_db_fixture.session_factory.kw["bind"]) as session:
@@ -333,7 +334,7 @@ async def test_change_address_is_owned_and_audited(action_db_fixture) -> None:
         request_id="request-address-3",
     )
 
-    assert success.responses[0]["text"] == "订单收货信息已修改"
+    assert success.responses[0]["text"] == "订单收货信息已修改成功"
     assert crossed.responses[0]["text"] == "未找到收货信息，请重新选择。"
 
     with Session(action_db_fixture.session_factory.kw["bind"]) as session:
@@ -385,8 +386,8 @@ async def test_apply_postsale_is_owned_idempotent_and_audited(action_db_fixture)
         request_id="request-postsale-3",
     )
 
-    assert "申请已提交" in first.responses[0]["text"]
-    assert "申请已提交" in second.responses[0]["text"]
+    assert "申请已成功提交" in first.responses[0]["text"]
+    assert "申请已成功提交" in second.responses[0]["text"]
     assert crossed.responses[0]["text"] == "未找到该订单。"
 
     with Session(action_db_fixture.session_factory.kw["bind"]) as session:

@@ -12,7 +12,7 @@ flows:
       - id: ask_order
         action: action_ask_order_id
       - id: collect_order
-        collect: postsale_order_id
+        collect: order_id
       - id: check_eligible
         action: action_check_postsale_eligible
       - id: ask_type

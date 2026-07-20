@@ -723,7 +723,7 @@ class ActionAskSetReceiveInfo(Action):
                     )
                     session.commit()
                 
-                result.add_response("订单收货信息已修改")
+                result.add_response("订单收货信息已修改成功")
                 logger.info(f"订单 {order_id} 收货信息更新为: {receive_info.receive_id}")
                 
             except Exception as e:
@@ -843,7 +843,7 @@ class ActionCancelOrder(Action):
                         ),
                     )
                     session.commit()
-                    result.add_response("订单已取消")
+                    result.add_response("订单已取消成功")
                     return result
                 
                 # 更新订单状态为已取消
@@ -864,7 +864,7 @@ class ActionCancelOrder(Action):
                 session.commit()
             
             # 生成回复消息
-            message = "订单已取消"
+            message = "订单已取消成功"
             # 如果订单状态为待发货，则添加退款金额提示
             if old_order_status == "待发货":
                 message += "，退款金额将在24小时内返还您的账户"
