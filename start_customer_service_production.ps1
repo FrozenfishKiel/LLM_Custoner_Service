@@ -78,6 +78,9 @@ function Set-ProductionDefaults {
     if (-not $env:REDIS_URL) {
         $env:REDIS_URL = "redis://127.0.0.1:6379/15"
     }
+    if (-not $env:EMBEDDING_MODEL) {
+        $env:EMBEDDING_MODEL = "./models/bge-base-zh-v1.5"
+    }
 }
 
 function Assert-RequiredEnvironment {
@@ -137,6 +140,86 @@ function Test-ExternalServices {
     $redisUri = [Uri]$env:REDIS_URL
     $redisPort = if ($redisUri.Port -gt 0) { $redisUri.Port } else { 6379 }
     Test-TcpPort -ComputerName $redisUri.Host -RemotePort $redisPort -Label "Redis"
+
+    $neo4jUri = [Uri]$env:NEO4J_URI
+    $neo4jPort = if ($neo4jUri.Port -gt 0) { $neo4jUri.Port } else { 7687 }
+    Test-TcpPort -ComputerName $neo4jUri.Host -RemotePort $neo4jPort -Label "Neo4j"
+
+    $script = @'
+import os
+
+from neo4j import GraphDatabase
+from redis.asyncio import Redis
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import URL
+import asyncio
+
+
+def check_mysql() -> None:
+    url = URL.create(
+        drivername="mysql+pymysql",
+        username=os.environ.get("MYSQL_USER", "root"),
+        password=os.environ["MYSQL_PASSWORD"],
+        host=os.environ.get("MYSQL_HOST", "127.0.0.1"),
+        port=int(os.environ.get("MYSQL_PORT", "3306")),
+        database=os.environ.get("MYSQL_DATABASE", "ecs"),
+        query={"charset": "utf8mb4"},
+    )
+    engine = create_engine(url, pool_pre_ping=True, connect_args={"connect_timeout": 3})
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    finally:
+        engine.dispose()
+    print("MYSQL_CONNECTION_OK")
+
+
+async def check_redis() -> None:
+    redis = Redis.from_url(
+        os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/15"),
+        socket_connect_timeout=3,
+        socket_timeout=3,
+    )
+    try:
+        await redis.ping()
+    finally:
+        await redis.aclose()
+    print("REDIS_CONNECTION_OK")
+
+
+def check_neo4j() -> None:
+    driver = GraphDatabase.driver(
+        os.environ["NEO4J_URI"],
+        auth=(os.environ.get("NEO4J_USER", "neo4j"), os.environ["NEO4J_PASSWORD"]),
+    )
+    try:
+        driver.verify_connectivity()
+        with driver.session() as session:
+            session.run("RETURN 1").consume()
+    finally:
+        driver.close()
+    print("NEO4J_CONNECTION_OK")
+
+
+try:
+    check_mysql()
+except Exception:
+    raise RuntimeError("MySQL credential check failed") from None
+
+try:
+    asyncio.run(check_redis())
+except Exception:
+    raise RuntimeError("Redis connection check failed") from None
+
+try:
+    check_neo4j()
+except Exception:
+    raise RuntimeError("Neo4j credential check failed") from None
+'@
+    $script | & $PythonExe -
+    if ($LASTEXITCODE -ne 0) {
+        throw "External service credential check failed."
+    }
     Write-Host "External service checks passed."
 }
 
@@ -149,11 +232,19 @@ required_modules = [
     "dotenv",
     "fastapi",
     "uvicorn",
+    "redis",
+    "sqlalchemy",
+    "pymysql",
+    "yaml",
+    "jinja2",
     "jieba",
     "neo4j",
     "neo4j_graphrag",
+    "langgraph",
+    "langchain_core",
     "langchain_community",
     "langchain_openai",
+    "sentence_transformers",
 ]
 missing = [name for name in required_modules if importlib.util.find_spec(name) is None]
 if missing:
@@ -167,6 +258,56 @@ print("PYTHON_RUNTIME_OK")
     $script | & $PythonExe -
     if ($LASTEXITCODE -ne 0) {
         throw "Python runtime dependency check failed."
+    }
+}
+
+function Test-EmbeddingModelConfig {
+    Write-Step "Checking embedding model configuration"
+
+    $model = $env:EMBEDDING_MODEL
+    if (-not $model) {
+        throw "Embedding model check failed: EMBEDDING_MODEL is empty."
+    }
+
+    $looksLikeLocalPath = [System.IO.Path]::IsPathRooted($model) `
+        -or $model.StartsWith(".") `
+        -or $model.StartsWith("~") `
+        -or $model.Contains("\") `
+        -or $model.Contains("/")
+
+    if (-not $looksLikeLocalPath) {
+        Write-Host "EMBEDDING_MODEL_REMOTE_CONFIG_OK $model"
+    } else {
+        if ([System.IO.Path]::IsPathRooted($model)) {
+            $candidatePath = $model
+        } elseif ($model.StartsWith("~")) {
+            $candidatePath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($model)
+        } else {
+            $candidatePath = Join-Path $RootDir $model
+        }
+
+        if (-not (Test-Path -LiteralPath $candidatePath)) {
+            throw "Embedding model check failed: local EMBEDDING_MODEL path does not exist: $candidatePath"
+        }
+
+        Write-Host "EMBEDDING_MODEL_LOCAL_CONFIG_OK $candidatePath"
+    }
+
+    $script = @'
+import os
+
+from sentence_transformers import SentenceTransformer
+
+model_name = os.environ["EMBEDDING_MODEL"]
+try:
+    SentenceTransformer(model_name)
+except Exception as exc:
+    raise RuntimeError(f"Embedding model load failed: {type(exc).__name__}: {exc}") from None
+print("EMBEDDING_MODEL_LOAD_OK")
+'@
+    $script | & $PythonExe -
+    if ($LASTEXITCODE -ne 0) {
+        throw "Embedding model check failed."
     }
 }
 
@@ -268,6 +409,7 @@ Assert-RequiredEnvironment
 Write-Host "Required production configuration is present."
 
 Test-PythonRuntime
+Test-EmbeddingModelConfig
 Test-ExternalServices
 Test-ProductionAppFactory
 

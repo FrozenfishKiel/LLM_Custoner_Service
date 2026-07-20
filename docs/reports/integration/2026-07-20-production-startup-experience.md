@@ -2,42 +2,48 @@
 
 日期：2026-07-20
 
-## 本轮改动
+## 本轮目标
 
-本轮在独立 worktree `D:\Projects\llm_customer_service_ops`、分支 `feat/ops-startup-experience` 中完成，避免和 LLM 质量修复窗口互相改同一批文件。
+本轮继续在隔离 worktree `D:\Projects\llm_customer_service_ops`、分支 `feat/ops-startup-experience` 中推进“上线运维/启动体验”任务，重点不是改业务功能，而是让正式启动入口在用户双击或运行前能尽早暴露真实缺项。
 
-新增正式启动入口：
+## 已完成改动
 
-- `start_customer_service_production.ps1`
-- `start_customer_service_production.bat`
+- 扩展 `start_customer_service_production.ps1` 的 Python 运行时依赖预检，覆盖真实 Agent 链路会用到的 Redis、SQLAlchemy、PyMySQL、Jinja2、LangGraph、LangChain Core、SentenceTransformers 等模块。
+- 外部服务预检从 TCP 探测升级为真实凭据检查：
+  - MySQL 执行 `SELECT 1`
+  - Redis 执行 `PING`
+  - Neo4j 执行 `verify_connectivity()` 和 `RETURN 1`
+- 增加 Neo4j 端口预检，避免只检查 MySQL/Redis。
+- 增加 embedding 模型预检：
+  - `EMBEDDING_MODEL` 为空时失败。
+  - 本地路径形式的 `EMBEDDING_MODEL` 必须真实存在。
+  - 存在路径或远程模型 ID 都会继续用当前 Python 运行时实际初始化 `SentenceTransformer(EMBEDDING_MODEL)`。
+  - 加载失败时启动脚本直接失败，不再让 app factory 吞掉 GraphRAG 初始化错误后返回“假成功”。
+- 增加测试夹具，单元测试使用 fake `sentence_transformers`，避免测试依赖 HuggingFace 网络下载；真实手工验证不使用该夹具。
 
-保留原课程 demo 入口：
+## 已运行验证
 
-- `start_customer_service.ps1`
-- `start_customer_service.bat`
+### 1. RED/GREEN：缺失本地 embedding 模型
 
-README 启动段已补充中文说明，区分“正式前端 + 生产 auth/chat 链路”和“课程 inspect Demo”。
+新增测试先失败，失败原因为启动脚本没有提前识别缺失模型路径，而是继续构造 app 并返回 0。
 
-## 脚本能力
+修复后单项测试通过：
 
-`start_customer_service_production.ps1` 支持：
+```text
+1 passed
+```
 
-- `-CheckOnly`：只做预检和 app factory 检查，不启动长驻服务。
-- `-SkipExternalServiceChecks`：跳过 MySQL/Redis TCP 探测，用于本机服务未启动时验证脚本和 FastAPI app factory。
-- `-NoBrowser`：不自动打开浏览器，便于自动化测试。
-- `-EnableInspect`：显式打开 inspect 页面；默认关闭。
-- `-BindAddress` / `-Port`：指定监听地址和端口。
+### 2. RED/GREEN：启动器必须实际加载 embedding 模型
 
-预检覆盖：
+新增测试先失败，失败原因为脚本中没有 `SentenceTransformer` 加载检查。
 
-- 必填生产配置存在性：MySQL、Neo4j、DeepSeek、auth public base URL、SMTP 基础配置。
-- Python 运行时依赖：`dotenv`、`fastapi`、`uvicorn`、`jieba`、`neo4j`、`neo4j_graphrag`、`langchain_community`、`langchain_openai`。
-- 外部服务：MySQL、Redis TCP 可达性。
-- FastAPI app factory：构建 `create_production_app()`，并像真实用户一样请求 `/`、`/login`、`/health/live`、`/health/ready`、`/internal/metrics`、未登录 `/api/chat/messages`。
+修复后单项测试通过：
 
-## 我实际跑过的测试
+```text
+1 passed
+```
 
-### 1. TDD 脚本单元测试
+### 3. 启动脚本单元测试
 
 命令：
 
@@ -48,69 +54,67 @@ C:\Users\frozenfish\.cache\codex-runtimes\codex-primary-runtime\dependencies\pyt
 结果：
 
 ```text
-3 passed
+8 passed in 21.01s
 ```
 
-覆盖：
+覆盖内容：
 
-- PowerShell 脚本 `-CheckOnly -SkipExternalServiceChecks` 可以真实执行并构建生产 app。
-- 缺少 `AUTH_PUBLIC_BASE_URL` 时会快速失败。
-- 输出不包含测试密码、Neo4j 密码、DeepSeek key 占位值。
-- `.bat` wrapper 确实委托到 `start_customer_service_production.ps1`。
+- `-CheckOnly -SkipExternalServiceChecks -NoBrowser` 可执行。
+- 缺少必要生产配置时会失败。
+- 输出不包含测试密码、SMTP 密码、Neo4j 密码或 DeepSeek key 占位值。
+- `.bat` 双击入口委托到 PowerShell 脚本。
+- Python 运行时依赖覆盖真实 Agent 依赖。
+- MySQL、Redis、Neo4j 会做真实连接/凭据检查。
+- 本地 embedding 模型路径缺失会快速失败。
+- 启动器会实际加载 `SentenceTransformer(EMBEDDING_MODEL)`。
 
-### 2. 手动预检使用测试
+### 4. 真实脚本验证：默认本地模型缺失
 
-命令：
-
-```powershell
-.\start_customer_service_production.ps1 -CheckOnly -SkipExternalServiceChecks -NoBrowser -Port 8099
-```
-
-结果：
-
-```text
-PYTHON_RUNTIME_OK
-PRODUCTION_APP_FACTORY_OK route_count=20
-PRODUCTION_STARTUP_CHECK_OK http://127.0.0.1:8099
-```
-
-备注：因为本机 Neo4j 未启动，Agent 内部 GraphRAG 初始化仍会记录 “Could not connect to Neo4j database”。这是 `-SkipExternalServiceChecks` 明确允许的降级场景；不加该参数时会在外部服务检查阶段提前失败。
-
-### 3. 真实启动 + HTTP 使用测试
-
-我用脚本后台启动了生产服务到临时端口 `8099`，随后实际请求页面和接口，再关闭监听进程。
-
-结果：
-
-```text
-FRONT_STATUS=200
-LOGIN_STATUS=200
-LIVE={"status":"alive"}
-READY={"ready":true,"checks":{"auth_configured":true,"chat_configured":true,"agent_ready":true,"rate_limiter_configured":true}}
-METRICS_HAS_AUTH=True
-CHAT_UNAUTH_STATUS=401
-```
-
-这说明脚本不只是静态存在，实际可以把正式前端、健康检查、metrics 和未登录聊天保护跑起来。
-
-### 4. 外部服务失败路径测试
-
-命令：
+当前 worktree 没有 `.env`，项目内也没有 `./models/bge-base-zh-v1.5`。运行：
 
 ```powershell
 .\start_customer_service_production.ps1 -CheckOnly -NoBrowser -Port 8099
 ```
 
-当前本机 Docker/MySQL 不可用，结果按预期失败：
+结果按预期失败：
 
 ```text
-MySQL is not reachable at 127.0.0.1:3306
+Embedding model check failed: local EMBEDDING_MODEL path does not exist: D:\Projects\llm_customer_service_ops\.\models\bge-base-zh-v1.5
 ```
 
-该失败不泄露 MySQL 密码、SMTP 密码、Neo4j 密码或 DeepSeek key。
+这说明启动脚本已经能在进入 app factory 前暴露模型资产缺失问题。
 
-## 剩余问题
+### 5. 真实脚本验证：`.env.example` 原有模型名不可用
 
-- 当前本机 Docker daemon 未运行，所以完整外部服务预检不能通过。
-- `ecs_demo/actions/action_logistics.py` 仍会打印一个 action 导入错误：`ActionGetLogisticsCompanys` 无法从同文件导入。它不阻止 FastAPI 启动，但会影响后续物流相关能力，建议放到 LLM/业务 action 修复线处理。
-- `/internal/metrics` 仍需在真实部署时通过反向代理或网络策略限制访问。
+将 `EMBEDDING_MODEL` 设置为原 `.env.example` 中的 `text-embedding-v3` 后运行：
+
+```powershell
+.\start_customer_service_production.ps1 -CheckOnly -NoBrowser -Port 8099
+```
+
+结果按预期失败：
+
+```text
+Embedding model load failed: RepositoryNotFoundError
+Repository Not Found for url: https://huggingface.co/sentence-transformers/text-embedding-v3/resolve/main/modules.json
+```
+
+结论：`text-embedding-v3` 不是当前 `sentence_transformers.SentenceTransformer(...)` 能直接加载的有效模型名，不能作为生产启动示例配置。
+
+## 当前真实阻塞
+
+正式启动链路目前卡在 embedding 模型资产/配置：
+
+- 默认配置要求本地存在 `./models/bge-base-zh-v1.5`，但当前 worktree 没有该目录。
+- 原 `.env.example` 的 `EMBEDDING_MODEL=text-embedding-v3` 与当前代码不兼容，已确认会加载失败。
+
+这不是 Docker、MySQL、Redis 或 Neo4j 的阻塞。前一轮已经用 Docker 容器环境中的真实凭据验证过 MySQL、Redis、Neo4j 可连接；本轮新增的模型加载检查把后续真实阻塞提前暴露出来。
+
+## 后续建议
+
+上线前必须二选一：
+
+1. 准备并随部署流程提供本地模型目录 `./models/bge-base-zh-v1.5`。
+2. 明确改造 embedding 方案，使用当前代码可加载的 HuggingFace sentence-transformers 模型 ID，并接受首次下载/缓存策略。
+
+在没有有效 embedding 模型前，不应声明正式 chat/GraphRAG 链路可上线。
