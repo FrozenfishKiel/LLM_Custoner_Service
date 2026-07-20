@@ -155,3 +155,33 @@ cannot import name 'ActionGetLogisticsCompanys' from 'actions.action_logistics'
 ## 后续建议
 
 embedding 模型资产阻塞已解除。后续上线前仍建议处理 LangChain/Neo4j 弃用 warning，并继续做真实浏览器 E2E 与压力/风险测试。
+
+## 2026-07-20 追加：真实长驻启动测试
+
+在 `-CheckOnly` 预检之外，新增 `tests/integration/test_production_startup_server.py`，用于验证正式启动脚本真的能以长驻服务方式启动，并完成用户视角 HTTP 使用检查。
+
+该测试默认跳过，避免普通开发者 clone 后被本机 Docker、真实模型和外部服务依赖卡住。需要真实验证时设置：
+
+```powershell
+$env:RUN_PRODUCTION_STARTUP_SERVER_TEST='1'
+python -m pytest tests/integration/test_production_startup_server.py -q -s
+```
+
+覆盖内容：
+
+- 通过 `start_customer_service_production.ps1` 启动真实生产服务。
+- 等待 `/health/ready` 返回 ready。
+- 请求 `/` 和 `/login`，确认正式前端页面可访问。
+- 请求 `/health/live`，确认进程存活检查可用。
+- 请求 `/internal/metrics`，确认指标存在且不输出关键 secret 名称。
+- 未登录请求 `/api/chat/messages`，确认返回 `401`，不会绕过登录保护。
+
+本轮调试中遇到一次测试卡住：原因不是模型下载或 Docker 服务，而是测试通过 PowerShell 启动长驻脚本后，真正监听端口的是脚本内部的 Python/uvicorn 子进程。原测试只杀父进程，导致子进程残留并让 pytest 外层等到超时。修复后测试结束时按端口定位并终止真实监听进程。
+
+验证结果：
+
+```text
+1 passed in 84.23s (0:01:24)
+```
+
+复测后确认没有残留的本地监听进程。
