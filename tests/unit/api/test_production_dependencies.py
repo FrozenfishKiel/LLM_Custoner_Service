@@ -5,7 +5,9 @@ import subprocess
 import sys
 
 from atguigu_ai.api.production import build_production_auth_deps, create_production_app
+from atguigu_ai.api.routes.chat import ChatRouteDependencies
 from atguigu_ai.auth import AuthService, RedisCredentialTokenStore, RedisSessionStore
+from atguigu_ai.auth.business_identity import BusinessIdentityResolver
 from atguigu_ai.email import SMTPEmailDelivery
 from atguigu_ai.rate_limit import RedisRateLimiter
 from fastapi.testclient import TestClient
@@ -14,6 +16,14 @@ from fastapi.testclient import TestClient
 class FakeRedis:
     async def eval(self, *_args):
         return [1, 1, 60]
+
+
+class FakeAgent:
+    async def handle_message(self, *_args, **_kwargs):
+        raise AssertionError("not exercised in this unit test")
+
+    async def reset_tracker(self, *_args, **_kwargs):
+        raise AssertionError("not exercised in this unit test")
 
 
 def _settings() -> dict[str, str]:
@@ -79,6 +89,73 @@ def test_create_production_app_registers_auth_dependencies_with_rate_limiter() -
         json={"email": "user@example.com", "password": "wrong"},
     )
     assert response.status_code in {401, 503}
+
+
+def test_create_production_app_registers_chat_dependencies_when_agent_factory_is_provided() -> None:
+    app = create_production_app(
+        environ=_settings(),
+        redis_factory=lambda *_args, **_kwargs: FakeRedis(),
+        agent_factory=lambda _path: FakeAgent(),
+        enable_inspect=False,
+    )
+
+    assert isinstance(app.state.chat_deps, ChatRouteDependencies)
+    assert isinstance(app.state.chat_deps.business_identity_resolver, BusinessIdentityResolver)
+    response = TestClient(app).post("/api/chat/messages", json={"message": "hello"})
+    assert response.status_code == 401
+
+
+def test_create_production_app_requires_existing_agent_path_when_agent_factory_is_provided() -> None:
+    settings = _settings()
+    settings["PRODUCTION_AGENT_PATH"] = "missing-production-agent-path"
+
+    try:
+        create_production_app(
+            environ=settings,
+            redis_factory=lambda *_args, **_kwargs: FakeRedis(),
+            agent_factory=lambda _path: FakeAgent(),
+            enable_inspect=False,
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "PRODUCTION_AGENT_PATH is invalid"
+    else:
+        raise AssertionError("missing production agent path should fail")
+
+
+def test_production_health_live_ready_and_metrics_are_available_without_secret_leakage() -> None:
+    app = create_production_app(
+        environ=_settings(),
+        redis_factory=lambda *_args, **_kwargs: FakeRedis(),
+        agent_factory=lambda _path: FakeAgent(),
+        enable_inspect=False,
+    )
+    client = TestClient(app)
+
+    live = client.get("/health/live")
+    legacy = client.get("/health")
+    ready = client.get("/health/ready")
+    metrics = client.get("/internal/metrics")
+
+    assert live.status_code == 200
+    assert live.json() == {"status": "alive"}
+    assert legacy.status_code == 200
+    assert legacy.json()["agent_ready"] is True
+    assert ready.status_code == 200
+    assert ready.json()["ready"] is True
+    assert ready.json()["checks"] == {
+        "auth_configured": True,
+        "chat_configured": True,
+        "agent_ready": True,
+        "rate_limiter_configured": True,
+    }
+    assert metrics.status_code == 200
+    assert metrics.headers["content-type"].startswith("text/plain")
+    assert "customer_service_auth_configured 1" in metrics.text
+    assert "customer_service_chat_configured 1" in metrics.text
+    assert "customer_service_agent_ready 1" in metrics.text
+    assert "customer_service_rate_limiter_configured 1" in metrics.text
+    for secret in ("mysql-secret", "smtp-secret", "redis://", "session-token"):
+        assert secret not in metrics.text
 
 
 def test_production_helpers_are_exported_from_api_package() -> None:

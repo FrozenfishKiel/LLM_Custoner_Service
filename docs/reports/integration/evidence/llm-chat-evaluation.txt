@@ -1,0 +1,64 @@
+LLM 聊天评测历史证据
+日期：2026-07-19
+Workspace: D:\Projects\llm_customer_service
+
+1) 聚合评测运行
+
+命令：
+D:\Anaconda3\envs\ai-content-ops\python.exe -m pytest tests/integration/test_llm_chat_evaluation.py -q -s -m integration
+
+退出码：
+0
+
+关键输出：
+llm_chat_eval total_cases=14 scenario_completion_rate=0.0000 business_fact_accuracy=0.0000 boundary_refusal_rate=0.0000 average_turns_to_completion=0.00
+1 passed, 3 warnings in 59.54s
+
+观察到的 warnings：
+- ecs_demo\addons\information_retrieval.py:33 存在 langchain-community deprecation warning。
+- ecs_demo\addons\information_retrieval.py:206 存在 Neo4jGraph deprecation warning。
+- ecs_demo\addons\information_retrieval.py:221 存在 CypherQueryCorrector deprecation warning。
+
+2) 逐用例结果
+
+命令：
+使用 tests.evaluation.chat_eval_cases.EVAL_CASES 与 tests.integration.chat_eval_support.make_eval_context/evaluate_case 的 inline Python runner。
+
+退出码：
+0
+
+输出：
+order_query_basic|completed=0|factually_correct=0|boundary_correct=1|turns=1
+order_query_followup|completed=0|factually_correct=0|boundary_correct=1|turns=2
+logistics_query_basic|completed=0|factually_correct=0|boundary_correct=1|turns=1
+logistics_query_followup|completed=0|factually_correct=0|boundary_correct=1|turns=2
+address_modify_direct|completed=0|factually_correct=0|boundary_correct=1|turns=2
+address_modify_name|completed=0|factually_correct=0|boundary_correct=1|turns=2
+order_cancel_direct|completed=0|factually_correct=0|boundary_correct=1|turns=2
+order_cancel_followup|completed=0|factually_correct=0|boundary_correct=1|turns=2
+postsale_apply_refund|completed=0|factually_correct=0|boundary_correct=1|turns=3
+postsale_apply_exchange|completed=0|factually_correct=0|boundary_correct=1|turns=3
+boundary_weather|completed=0|factually_correct=1|boundary_correct=0|turns=1
+boundary_programming|completed=0|factually_correct=1|boundary_correct=0|turns=1
+boundary_general_chat|completed=0|factually_correct=1|boundary_correct=0|turns=1
+boundary_finance|completed=0|factually_correct=1|boundary_correct=0|turns=1
+
+3) 真实认证聊天流示例响应
+
+命令：
+对选定 case 使用 _run_case 的 inline Python runner。
+
+退出码：
+0
+
+示例：
+- case=order_query_basic
+  - turns=1
+  - response=未包含预期订单事实
+- case=boundary_programming
+  - turns=1
+  - response=未包含评测要求的客服范围拒答
+
+4) 诊断备注
+
+评测 harness 和 auth integration tests 都会使用 Redis DB 15 并刷新 session 状态；并发运行这些 suite 时可能互相污染。因此 LLM eval 应单独运行，或在后续为 eval 分配独立 Redis DB。

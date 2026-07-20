@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from redis.asyncio import Redis
@@ -11,10 +12,12 @@ from sqlalchemy.engine import URL
 from sqlalchemy.orm import sessionmaker
 
 from atguigu_ai.api.dependencies import AuthRouteDependencies
+from atguigu_ai.api.routes.chat import ChatRouteDependencies
 from atguigu_ai.api.server import create_app
 from atguigu_ai.auth import (
     AccountRepository,
     AuthService,
+    BusinessIdentityResolver,
     CredentialTokenPurpose,
     PasswordHasher,
     RedisCredentialTokenStore,
@@ -45,22 +48,67 @@ class RepositoryUnitOfWork:
         self._session.close()
 
 
+class ProductionBindingRepository:
+    def __init__(self, session_factory) -> None:
+        self._session_factory = session_factory
+
+    def get_business_user_binding(self, account_id: str):
+        with self._session_factory() as session:
+            return AccountRepository(session).get_business_user_binding(account_id)
+
+
 def build_production_auth_deps(
     *,
     environ: Mapping[str, str] | None = None,
     redis_factory: Any = Redis.from_url,
 ) -> AuthRouteDependencies:
     settings = os.environ if environ is None else environ
+    redis = _build_redis(settings, redis_factory)
+    session_factory = _build_session_factory(settings)
+    sessions = RedisSessionStore(redis)
+    service = _build_auth_service(settings, session_factory, redis, sessions)
+    return AuthRouteDependencies(
+        service=service,
+        sessions=sessions,
+        rate_limiter=RedisRateLimiter(redis),
+    )
+
+
+def build_production_chat_deps(
+    *,
+    environ: Mapping[str, str] | None = None,
+    agent_factory: Any | None = None,
+) -> ChatRouteDependencies:
+    settings = os.environ if environ is None else environ
+    agent_path = _production_agent_path(settings)
+    factory = agent_factory or _load_agent
+    agent = factory(agent_path)
+    session_factory = _build_session_factory(settings)
+    return ChatRouteDependencies(
+        agent=agent,
+        business_identity_resolver=BusinessIdentityResolver(
+            ProductionBindingRepository(session_factory)
+        ),
+    )
+
+
+def _build_redis(settings: Mapping[str, str], redis_factory: Any):
     redis = redis_factory(
         settings.get("REDIS_URL", "redis://127.0.0.1:6379/15"),
         decode_responses=True,
         socket_connect_timeout=1,
         socket_timeout=1,
     )
+    return redis
+
+
+def _build_session_factory(settings: Mapping[str, str]):
     engine = create_engine(_build_database_url(settings), pool_pre_ping=True)
-    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
-    sessions = RedisSessionStore(redis)
-    service = AuthService(
+    return sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def _build_auth_service(settings: Mapping[str, str], session_factory, redis, sessions):
+    return AuthService(
         uow_factory=lambda: RepositoryUnitOfWork(session_factory),
         password_hasher=PasswordHasher(),
         credential_tokens=RedisCredentialTokenStore(
@@ -82,24 +130,29 @@ def build_production_auth_deps(
         public_base_url=_required(settings, "AUTH_PUBLIC_BASE_URL"),
         clock=lambda: datetime.now(timezone.utc),
     )
-    return AuthRouteDependencies(
-        service=service,
-        sessions=sessions,
-        rate_limiter=RedisRateLimiter(redis),
-    )
 
 
 def create_production_app(
     *,
     environ: Mapping[str, str] | None = None,
     redis_factory: Any = Redis.from_url,
+    agent_factory: Any | None = None,
     enable_inspect: bool = False,
 ):
+    settings = os.environ if environ is None else environ
+    auth_deps = build_production_auth_deps(
+        environ=settings,
+        redis_factory=redis_factory,
+    )
+    chat_deps = None
+    if _bool_setting(settings, "PRODUCTION_CHAT_ENABLED", agent_factory is not None):
+        chat_deps = build_production_chat_deps(
+            environ=settings,
+            agent_factory=agent_factory,
+        )
     return create_app(
-        auth_deps=build_production_auth_deps(
-            environ=environ,
-            redis_factory=redis_factory,
-        ),
+        auth_deps=auth_deps,
+        chat_deps=chat_deps,
         enable_inspect=enable_inspect,
     )
 
@@ -135,4 +188,26 @@ def _build_database_url(settings: Mapping[str, str]) -> URL:
     )
 
 
-__all__ = ["RepositoryUnitOfWork", "build_production_auth_deps", "create_production_app"]
+def _production_agent_path(settings: Mapping[str, str]) -> Path:
+    raw = settings.get("PRODUCTION_AGENT_PATH", "ecs_demo")
+    path = Path(raw)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    if not path.exists():
+        raise RuntimeError("PRODUCTION_AGENT_PATH is invalid")
+    return path
+
+
+def _load_agent(path: Path):
+    from atguigu_ai.agent.agent import Agent, AgentConfig
+
+    return Agent.load(path, config=AgentConfig())
+
+
+__all__ = [
+    "ProductionBindingRepository",
+    "RepositoryUnitOfWork",
+    "build_production_auth_deps",
+    "build_production_chat_deps",
+    "create_production_app",
+]

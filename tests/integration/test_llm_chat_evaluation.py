@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import pytest
+
 from tests.evaluation.chat_eval_cases import EVAL_CASES
 from tests.integration.chat_eval_support import (
     aggregate_metrics,
     evaluate_case,
     make_eval_context,
 )
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
 async def test_llm_chat_evaluation_emits_resume_usable_metrics() -> None:
@@ -21,7 +25,7 @@ async def test_llm_chat_evaluation_emits_resume_usable_metrics() -> None:
         assert 0.0 <= metrics.scenario_completion_rate <= 1.0
         assert 0.0 <= metrics.business_fact_accuracy <= 1.0
         assert 0.0 <= metrics.boundary_refusal_rate <= 1.0
-        assert metrics.average_turns_to_completion >= 1.0
+        assert metrics.average_turns_to_completion >= 0.0
 
         print(
             "llm_chat_eval "

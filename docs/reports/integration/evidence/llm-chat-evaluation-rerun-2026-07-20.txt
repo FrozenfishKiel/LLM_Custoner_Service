@@ -1,0 +1,18 @@
+LLM 聊天评测当前环境复跑证据
+日期：2026-07-20
+Workspace: D:\Projects\llm_customer_service
+
+命令：
+C:\Users\frozenfish\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m pytest tests/integration/test_llm_chat_evaluation.py -q -s -m integration
+
+退出码：
+1
+
+关键输出：
+FAILED tests/integration/test_llm_chat_evaluation.py::test_llm_chat_evaluation_emits_resume_usable_metrics
+
+失败原因：
+AssertionError: Local MySQL is unavailable for integration tests
+
+解释：
+本次复跑已进入真实 integration 环境准备阶段，但当前机器本地 MySQL 不可用，无法创建隔离测试数据库，因此没有得到新的 LLM 质量指标。不能把本次复跑记为通过。

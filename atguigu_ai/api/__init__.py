@@ -6,7 +6,11 @@ atguigu_ai API模块
 """
 
 from atguigu_ai.api.dependencies import AuthRouteDependencies
-from atguigu_ai.api.production import build_production_auth_deps, create_production_app
+from atguigu_ai.api.production import (
+    build_production_auth_deps,
+    build_production_chat_deps,
+    create_production_app,
+)
 from atguigu_ai.api.routes.chat import ChatRouteDependencies
 from atguigu_ai.api.server import AtguiguServer, create_app
 
@@ -15,6 +19,7 @@ __all__ = [
     "AuthRouteDependencies",
     "ChatRouteDependencies",
     "build_production_auth_deps",
+    "build_production_chat_deps",
     "create_app",
     "create_production_app",
 ]

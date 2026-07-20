@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -136,6 +136,7 @@ class AtguiguServer:
         if self.auth_deps is not None and self.chat_deps is not None:
             from atguigu_ai.api.routes import create_chat_router
 
+            app.state.chat_deps = self.chat_deps
             app.include_router(create_chat_router(self.chat_deps, self.auth_deps))
         
         return app
@@ -150,7 +151,7 @@ class AtguiguServer:
             return {
                 "status": "ok",
                 "version": __version__,
-                "agent_ready": self.agent is not None,
+                "agent_ready": self._production_readiness_checks()["agent_ready"],
             }
         
         @app.get("/health", response_model=HealthResponse)
@@ -160,8 +161,42 @@ class AtguiguServer:
             return {
                 "status": "ok",
                 "version": __version__,
-                "agent_ready": self.agent is not None,
+                "agent_ready": self._production_readiness_checks()["agent_ready"],
             }
+
+        @app.get("/health/live")
+        async def liveness_check():
+            """轻量存活检查：只确认 FastAPI 进程可以响应请求。"""
+            return {"status": "alive"}
+
+        @app.get("/health/ready")
+        async def readiness_check():
+            """生产就绪检查：确认关键依赖对象已经完成装配。"""
+            checks = self._production_readiness_checks()
+            return {
+                "ready": all(checks.values()),
+                "checks": checks,
+            }
+
+        @app.get("/internal/metrics")
+        async def internal_metrics():
+            """内部最小指标快照，不输出任何配置值或 secret。"""
+            checks = self._production_readiness_checks()
+            metrics = [
+                "# HELP customer_service_auth_configured Auth route dependencies are configured.",
+                "# TYPE customer_service_auth_configured gauge",
+                f"customer_service_auth_configured {_as_metric_bool(checks['auth_configured'])}",
+                "# HELP customer_service_chat_configured Chat route dependencies are configured.",
+                "# TYPE customer_service_chat_configured gauge",
+                f"customer_service_chat_configured {_as_metric_bool(checks['chat_configured'])}",
+                "# HELP customer_service_agent_ready Agent dependency is configured.",
+                "# TYPE customer_service_agent_ready gauge",
+                f"customer_service_agent_ready {_as_metric_bool(checks['agent_ready'])}",
+                "# HELP customer_service_rate_limiter_configured Rate limiter dependency is configured.",
+                "# TYPE customer_service_rate_limiter_configured gauge",
+                f"customer_service_rate_limiter_configured {_as_metric_bool(checks['rate_limiter_configured'])}",
+            ]
+            return PlainTextResponse("\n".join(metrics) + "\n")
         
         @app.post("/api/messages", response_model=List[MessageResponse])
         async def send_message(request: MessageRequest):
@@ -448,6 +483,21 @@ class AtguiguServer:
                 """调试页面。"""
                 return self._get_inspect_html()
     
+    def _production_readiness_checks(self) -> Dict[str, bool]:
+        """Return production dependency readiness without exposing config values."""
+        chat_agent = getattr(self.chat_deps, "agent", None) if self.chat_deps is not None else None
+        rate_limiter = (
+            getattr(self.auth_deps, "rate_limiter", None)
+            if self.auth_deps is not None
+            else None
+        )
+        return {
+            "auth_configured": self.auth_deps is not None,
+            "chat_configured": self.chat_deps is not None,
+            "agent_ready": self.agent is not None or chat_agent is not None,
+            "rate_limiter_configured": rate_limiter is not None,
+        }
+
     def _add_ws_connection(self, session_id: str, ws: WebSocket) -> None:
         """添加WebSocket连接。"""
         if session_id not in self._ws_connections:
@@ -568,3 +618,8 @@ def _resolve_cors_origins(
     if "*" in cors_origins:
         raise ValueError("auth routes require explicit trusted CORS origins")
     return cors_origins
+
+
+def _as_metric_bool(value: bool) -> int:
+    """Convert boolean readiness values to Prometheus-style gauge values."""
+    return 1 if value else 0
