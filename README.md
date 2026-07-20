@@ -60,27 +60,64 @@ Copy-Item .env.example .env
 
 ```powershell
 $env:PYTHON_EXE="C:\Path\To\python.exe"
-$env:ATGUIGU_CLI_EXE="C:\Path\Totguigu.exe"
+$env:ATGUIGU_CLI_EXE="C:\Path\To\atguigu.exe"
 ```
 
-## ?? Demo
+## 启动服务
+
+### 正式前端 + 生产 auth/chat 链路
+
+推荐先做预检，不启动长驻服务：
+
+```powershell
+.\start_customer_service_production.ps1 -CheckOnly
+```
+
+如果本机 MySQL、Redis、Neo4j 暂时没有启动，但只想检查脚本、Python 依赖和 FastAPI app factory：
+
+```powershell
+.\start_customer_service_production.ps1 -CheckOnly -SkipExternalServiceChecks
+```
+
+真实启动：
+
+```powershell
+.\start_customer_service_production.ps1
+```
+
+双击启动入口：
+
+```text
+start_customer_service_production.bat
+```
+
+启动后访问：
+
+- 正式前端：`http://127.0.0.1:8012/`
+- 登录页：`http://127.0.0.1:8012/login`
+- 就绪检查：`http://127.0.0.1:8012/health/ready`
+- 内部指标：`http://127.0.0.1:8012/internal/metrics`
+
+`/internal/metrics` 是内部运维接口，生产环境必须通过反向代理、内网 ACL 或平台网络策略限制访问。
+
+### 课程 inspect Demo
 
 ```powershell
 .\start_customer_service.ps1
 ```
 
-????????????
+只准备 MySQL/Neo4j 和演示数据，不启动服务：
 
 ```powershell
 .\start_customer_service.ps1 -PrepareOnly
 ```
 
-????????
+Demo 地址：
 
 - Inspect UI: `http://127.0.0.1:8012/inspect`
 - API docs: `http://127.0.0.1:8012/docs`
 
-???????
+停止旧 demo 服务：
 
 ```powershell
 .\stop_customer_service.bat
