@@ -103,18 +103,55 @@ Repository Not Found for url: https://huggingface.co/sentence-transformers/text-
 
 ## 当前真实阻塞
 
-正式启动链路目前卡在 embedding 模型资产/配置：
+上一轮正式启动链路卡在 embedding 模型资产/配置：
 
 - 默认配置要求本地存在 `./models/bge-base-zh-v1.5`，但当前 worktree 没有该目录。
 - 原 `.env.example` 的 `EMBEDDING_MODEL=text-embedding-v3` 与当前代码不兼容，已确认会加载失败。
 
 这不是 Docker、MySQL、Redis 或 Neo4j 的阻塞。前一轮已经用 Docker 容器环境中的真实凭据验证过 MySQL、Redis、Neo4j 可连接；本轮新增的模型加载检查把后续真实阻塞提前暴露出来。
 
+## 2026-07-20 追加处理
+
+用户要求 embedding 模型下载后直接封装进项目，后续不允许重复下载；同时要求解释并修复物流 Action 导入错误。
+
+### embedding 模型处理
+
+- 模型已下载到项目根目录 `models/bge-base-zh-v1.5`。
+- 下载缓存强制放在 worktree 内 `.model-cache/`，并通过 `.gitignore` 忽略，不提交。
+- `start_customer_service_production.ps1` 默认将 `HF_HOME`、`HUGGINGFACE_HUB_CACHE`、`SENTENCE_TRANSFORMERS_HOME` 和 `TRANSFORMERS_CACHE` 指向项目 `.model-cache/`，避免默认落到 C 盘。
+- 模型目录使用 Git LFS 跟踪，避免普通 Git 直接提交大模型二进制。
+- 真实启动预检已经在不显式设置 `EMBEDDING_MODEL`、不显式设置 HF 缓存变量的情况下通过，说明脚本会默认加载项目内模型。
+
+验证结果：
+
+```text
+EMBEDDING_MODEL_LOCAL_CONFIG_OK D:\Projects\llm_customer_service_ops\.\models\bge-base-zh-v1.5
+EMBEDDING_MODEL_LOAD_OK
+MYSQL_CONNECTION_OK
+REDIS_CONNECTION_OK
+NEO4J_CONNECTION_OK
+PRODUCTION_APP_FACTORY_OK route_count=20
+PRODUCTION_STARTUP_CHECK_OK http://127.0.0.1:8099
+```
+
+### 物流 Action 导入错误
+
+根因不是 `ActionGetLogisticsCompanys` 类不存在。直接导入 `ecs_demo.actions.action_logistics`、`actions.action_logistics` 和 `ecs_demo.actions` 都能看到该类。
+
+真正原因是动态 Action loader 用 `spec_from_file_location("actions.action_logistics", file)` 手工加载子模块；`action_logistics.py` 顶部又使用 `from .security import ...`，这会触发 Python 解析 `actions` 包并执行 `actions/__init__.py`。而 `actions/__init__.py` 又反向从正在半初始化的 `actions.action_logistics` 导入 `ActionGetLogisticsCompanys`，形成循环导入，所以报：
+
+```text
+cannot import name 'ActionGetLogisticsCompanys' from 'actions.action_logistics'
+```
+
+修复方式是在动态加载子模块前，先在 `sys.modules` 中注册一个轻量的 `actions` 包对象并设置 `__path__`，避免执行 `actions/__init__.py`，从而切断循环导入。
+
+回归测试：
+
+```text
+29 passed in 25.40s
+```
+
 ## 后续建议
 
-上线前必须二选一：
-
-1. 准备并随部署流程提供本地模型目录 `./models/bge-base-zh-v1.5`。
-2. 明确改造 embedding 方案，使用当前代码可加载的 HuggingFace sentence-transformers 模型 ID，并接受首次下载/缓存策略。
-
-在没有有效 embedding 模型前，不应声明正式 chat/GraphRAG 链路可上线。
+embedding 模型资产阻塞已解除。后续上线前仍建议处理 LangChain/Neo4j 弃用 warning，并继续做真实浏览器 E2E 与压力/风险测试。

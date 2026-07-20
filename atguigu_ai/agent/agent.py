@@ -13,6 +13,7 @@ import importlib.util
 import inspect
 import logging
 import sys
+import types
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -71,6 +72,13 @@ def _load_custom_actions(actions_path: Path) -> List[str]:
     parent_path = str(actions_path.parent)
     if parent_path not in sys.path:
         sys.path.insert(0, parent_path)
+
+    package_name = actions_path.name
+    if package_name not in sys.modules:
+        package = types.ModuleType(package_name)
+        package.__path__ = [str(actions_path)]  # type: ignore[attr-defined]
+        package.__package__ = package_name
+        sys.modules[package_name] = package
     
     try:
         # 扫描 actions 目录下的所有 .py 文件

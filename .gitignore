@@ -10,6 +10,8 @@
 # Local and generated runtime data
 docker-data/
 ecs_demo/models/
+models/**/.cache/
+.model-cache/
 course_assets/
 trackers/
 *.log

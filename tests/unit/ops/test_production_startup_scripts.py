@@ -176,3 +176,13 @@ def test_production_startup_embedding_preflight_loads_configured_model() -> None
     assert "SentenceTransformer" in script
     assert "EMBEDDING_MODEL_LOAD_OK" in script
     assert "Embedding model load failed" in script
+
+
+def test_production_startup_routes_model_caches_to_project_directory() -> None:
+    script = SCRIPT.read_text(encoding="utf-8")
+
+    assert ".model-cache" in script
+    assert "HF_HOME" in script
+    assert "HUGGINGFACE_HUB_CACHE" in script
+    assert "SENTENCE_TRANSFORMERS_HOME" in script
+    assert "TRANSFORMERS_CACHE" in script

@@ -1,8 +1,6 @@
 * text=auto eol=lf
-
 *.bat text eol=crlf
 *.ps1 text eol=crlf
-
 *.png binary
 *.jpg binary
 *.jpeg binary
@@ -12,3 +10,4 @@
 *.docx binary
 *.pptx binary
 *.xlsx binary
+models/** filter=lfs diff=lfs merge=lfs -text

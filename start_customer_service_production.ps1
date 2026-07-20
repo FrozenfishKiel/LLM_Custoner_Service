@@ -66,6 +66,19 @@ function Import-DotEnvFile {
 }
 
 function Set-ProductionDefaults {
+    $modelCacheDir = Join-Path $RootDir ".model-cache"
+    if (-not $env:HF_HOME) {
+        $env:HF_HOME = Join-Path $modelCacheDir "huggingface"
+    }
+    if (-not $env:HUGGINGFACE_HUB_CACHE) {
+        $env:HUGGINGFACE_HUB_CACHE = Join-Path $env:HF_HOME "hub"
+    }
+    if (-not $env:SENTENCE_TRANSFORMERS_HOME) {
+        $env:SENTENCE_TRANSFORMERS_HOME = Join-Path $modelCacheDir "sentence-transformers"
+    }
+    if (-not $env:TRANSFORMERS_CACHE) {
+        $env:TRANSFORMERS_CACHE = Join-Path $modelCacheDir "transformers"
+    }
     if (-not $env:PRODUCTION_CHAT_ENABLED) {
         $env:PRODUCTION_CHAT_ENABLED = "true"
     }
